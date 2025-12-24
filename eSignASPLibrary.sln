@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.13.35931.197 d17.13
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "eSignASPLibrary", "eSignASPLibrary.csproj", "{A064AA4A-79B8-4870-ABFD-3D75727D5D33}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{A064AA4A-79B8-4870-ABFD-3D75727D5D33}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A064AA4A-79B8-4870-ABFD-3D75727D5D33}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A064AA4A-79B8-4870-ABFD-3D75727D5D33}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A064AA4A-79B8-4870-ABFD-3D75727D5D33}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {FF67D040-62B3-4049-A1E3-5C2BE8DE1509}
+	EndGlobalSection
+EndGlobal

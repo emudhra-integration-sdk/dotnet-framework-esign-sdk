@@ -1,0 +1,134 @@
+# Build outputs
+/bin/
+/obj/
+/build/
+/dist/
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.userprefs
+
+# IDE files - Rider
+.idea/
+*.sln.iml
+
+# IDE files - VS Code
+/.vscode/
+
+# Claude Code
+/.claude/
+
+# NuGet
+*.nupkg
+*.snupkg
+**/packages/*
+!**/packages/build/
+*.nuget.props
+*.nuget.targets
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# Test Results
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+*.trx
+*.coverage
+*.coveragexml
+
+# Logs
+/logs/
+*.log
+*.log.*
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Credentials and sensitive files
+*.lic
+*.pfx
+*.snk
+credentials.properties
+secrets.properties
+appsettings.Development.json
+appsettings.Local.json
+
+# Old/backup folders
+*_Old/
+*_old/
+*_New/
+*_new/
+*.bak
+*.swp
+*~.nib
+*.orig
+
+# Temporary files
+*.tmp
+*.temp
+
+# ReSharper
+_ReSharper*/
+*.[Rr]e[Ss]harper
+*.DotSettings.user
+
+# TeamCity
+_TeamCity*
+
+# DotCover
+*.dotCover
+
+# NCrunch
+_NCrunch_*
+.*crunch*.local.xml
+nCrunchTemp_*
+
+# MSTest
+*.vsmdi
+*.testrunconfig
+
+# SpecFlow
+*.feature.cs
+*.feature.xlsx.*
+*.Specs_*.html
+
+# StyleCop
+StyleCopReport.xml
+
+# Installshield output folder
+[Ee]xpress/
+
+# DocProject
+DocProject/buildhelp/
+DocProject/Help/*.HxT
+DocProject/Help/*.HxC
+DocProject/Help/*.hhc
+DocProject/Help/*.hhk
+DocProject/Help/*.hhp
+DocProject/Help/Html2
+DocProject/Help/html
+
+# Publish profiles
+*.Publish.xml
+*.pubxml
+*.publishproj
