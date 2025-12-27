@@ -56,11 +56,16 @@
     <Compile Include="eSign\eSign.cs" />
     <Compile Include="eSign\eSignExtensionMethods.cs" />
     <Compile Include="eSign\eSignInput.cs" />
+    <Compile Include="eSign\eSignInputBuilder.cs" />
     <Compile Include="eSign\eSignReturnDocument.cs" />
     <Compile Include="eSign\eSignServiceReturn.cs" />
     <Compile Include="eSign\eSignSettings.cs" />
     <Compile Include="eSign\eSignUtility.cs" />
+    <Compile Include="eSign\PdfTextSearchResult.cs" />
+    <Compile Include="eSign\PdfTextSearchSignature.cs" />
     <Compile Include="eSign\RSAPKCS1SHA256SignatureDescription.cs" />
+    <Compile Include="eSign\TEXT_SEARCH_EXAMPLES.cs" />
+    <Compile Include="eSign\Util\PdfContentSearchUtility.cs" />
     <Compile Include="eSign\ValidateLicense.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="srcbc\asn1\anssi\ANSSINamedCurves.cs" />

@@ -1,17 +1,17 @@
-# eSign Library Kit (.NET Framework)
+# eSign Library Kit (.NET)
 
-A comprehensive .NET Framework SDK for digital signature operations, providing PDF signing capabilities with support for multiple authentication methods and signature appearance customization.
+A comprehensive .NET SDK for digital signature operations, providing PDF signing capabilities with support for multiple authentication methods and signature appearance customization.
 
 ## Table of Contents
 - [Features](#features)
 - [Requirements](#requirements)
 - [Installation](#installation)
-- [Building from Source](#building-from-source)
 - [Quick Start](#quick-start)
+- [New Features](#new-features)
 - [Integration Guide](#integration-guide)
 - [API Documentation](#api-documentation)
-- [License](#license)
 - [Security Considerations](#security-considerations)
+- [License](#license)
 - [Contributing](#contributing)
 
 ---
@@ -25,23 +25,19 @@ A comprehensive .NET Framework SDK for digital signature operations, providing P
   - Fingerprint
   - IRIS recognition
   - Face recognition
-- **Flexible Signature Appearance**:
-  - Standard signatures
-  - Image-based signatures
-  - One-liner signatures
-  - Advanced signatures with custom styling
-  - Colored graphics signatures
-  - Background image signatures
+- **Flexible Signature Positioning**:
+  - 9-point coordinate system (Top/Middle/Bottom × Left/Center/Right)
+  - Custom coordinates
+  - **NEW: Text search-based positioning** - automatically find and place signatures
+  - Page-level coordinates
 - **Document Processing**:
   - Page-level signing control (All, Even, Odd, First, Last, or specify pages)
-  - Hash-based or full document signing
-  - Document encryption/decryption
-  - Content search functionality
+  - PDF, Hash, and eMandate XML signing
+  - **NEW: Builder pattern for easy input creation**
 - **Enterprise Features**:
-  - Bank KYC integration
   - Proxy server support
   - Transaction management and verification
-  - Full .NET Framework 4.8 support
+  - Cross-platform support (.NET Standard 2.0)
 
 ---
 
@@ -49,69 +45,32 @@ A comprehensive .NET Framework SDK for digital signature operations, providing P
 
 ### Runtime Requirements
 - **.NET Framework**: 4.8 or higher
-- **Operating System**: Windows (7, 8, 10, 11, Server 2012+)
+- **Operating System**: Windows
 
 ### Build Requirements
-- **Visual Studio**: 2017 or higher
-- **.NET Framework SDK**: 4.8
-- **MSBuild**: 15.0 or higher
+- **.NET SDK**: 6.0 or higher
+- **IDE** (optional): Visual Studio 2019/2022, VS Code, JetBrains Rider
 
 ---
 
 ## Installation
 
-### Option 1: Use Pre-built DLL
-The easiest way to use this library is with the pre-built DLL file:
-
-1. Download `eSignASPLibrary.dll` from the releases page
-2. Add it as a reference to your project in Visual Studio:
-   - Right-click on References → Add Reference
-   - Browse to the DLL location
-   - Click OK
-
-### Option 2: Build from Source
-See [Building from Source](#building-from-source) section below
-
----
-
-## Building from Source
-
-### Using Visual Studio
-
-1. **Clone or download this repository**:
-   ```bash
-   git clone <repository-url>
-   cd NetFramework_eSignLibKit
-   ```
-
-2. **Open the solution**:
-   - Open `eSignASPLibrary.sln` in Visual Studio
-
-3. **Restore NuGet packages** (if any):
-   - Right-click on Solution → Restore NuGet Packages
-
-4. **Build the project**:
-   - Build → Build Solution
-   - Or press `Ctrl+Shift+B`
-
-5. **Locate the built DLL**:
-   The compiled DLL will be in `bin\Release\eSignASPLibrary.dll`
-
-### Using MSBuild Command Line
+### Option 1: Build from Source
 
 ```bash
-# Restore packages (if using NuGet)
-nuget restore eSignASPLibrary.sln
-
-# Build in Release mode
-msbuild eSignASPLibrary.sln /p:Configuration=Release
-
-# The DLL will be in bin\Release\
+git clone https://github.com/emudhra-integration-sdk/dotnet-framework-esign-sdk.git
+cd NetFramework_eSignLibKit
+dotnet restore
+dotnet build --configuration Release
 ```
 
-### Build Output
-- **DLL File**: `bin\Release\eSignASPLibrary.dll`
-- **PDB File**: `bin\Release\eSignASPLibrary.pdb` (for debugging)
+The compiled DLL will be in `bin/Release/eSignASPLibrary.dll`
+
+### Option 2: NuGet Package (Coming Soon)
+
+```bash
+dotnet add package eSignASPLibrary
+```
 
 ---
 
@@ -120,60 +79,67 @@ msbuild eSignASPLibrary.sln /p:Configuration=Release
 ### Basic PDF Signing Example
 
 ```csharp
-using eSign;
+using eSignASPLibrary;
 using System;
+using System.Collections.Generic;
+using System.IO;
 
 public class QuickStart
 {
     public static void Main(string[] args)
     {
-        try
+        // 1. Load PDF and convert to Base64
+        byte[] pdfBytes = File.ReadAllBytes("document.pdf");
+        string pdfBase64 = Convert.ToBase64String(pdfBytes);
+
+        // 2. Create signing input
+        var input = new eSignInputBuilder()
+            .SetDocBase64(pdfBase64)
+            .SetDocInfo("Contract_2024")
+            .SetSignedBy("John Doe")
+            .SetLocation("New York, NY")
+            .SetReason("Document Approval")
+            .SignFirstPage()
+            .SetCoordinates(eSign.Coordinates.Bottom_Right)
+            .Build();
+
+        // 3. Initialize eSign service
+        var esign = new eSign(
+            pfxFilePath: "certificate.pfx",
+            pfxPassword: "password",
+            pfxAlias: "alias",
+            isProxyRequired: false,
+            proxyIP: null,
+            proxyPort: 0,
+            proxyUserName: null,
+            proxyPassword: null,
+            aspID: "YOUR_ASP_ID",
+            eSignURL: "https://gateway.example.com/api/2.1/",
+            eSignURLV2: "https://gateway.example.com/api/2.5/",
+            eSignCheckStatusURL: "https://status.example.com"
+        );
+
+        // 4. Get gateway parameters
+        var result = esign.GetGateWayParam(
+            new List<eSignInput> { input },
+            signerID: "SIGNER_001",
+            transactionID: "TXN_" + DateTime.Now.ToString("yyyyMMddHHmmss"),
+            resposeURL: "https://yourapp.com/callback",
+            redirectUrl: "https://yourapp.com/success",
+            tempFolderPath: @"C:\Temp\eSign",
+            eSignAPIVersion: eSign.eSignAPIVersion.V3,
+            authMode: eSign.AuthMode.OTP
+        );
+
+        // 5. Handle response
+        if (result.ReturnStatus == eSign.status.Success)
         {
-            // 1. Configure eSign settings
-            var settings = new eSignSettings
-            {
-                ASPID = "YOUR_ASP_ID",
-                Gateway_URL = "https://gateway.example.com",
-                ResponseURL = "https://yourapp.com/callback"
-            };
-
-            // 2. Build user information
-            var userInfo = new UserInfoBuilder()
-                .SeteMail("user@example.com")
-                .SetFirstname("John")
-                .SetLastname("Doe")
-                .SetPhoneNumber("9876543210")
-                .Build();
-
-            // 3. Build eSign input
-            var input = new eSignInputBuilder()
-                .SeteSignSettings(settings)
-                .SetUserInfo(userInfo)
-                .SetPDFBase64("BASE64_ENCODED_PDF_CONTENT")
-                .SetCoordinates(Coordinates.BOTTOMRIGHT)
-                .SetAuthMode(AuthMode.OTP)
-                .SetAppearanceType(AppearanceType.STANDARD)
-                .Build();
-
-            // 4. Initialize eSign and generate gateway parameters
-            var esign = new eSign.eSign();
-            var result = esign.GenerateGatewayParameters(input);
-
-            // 5. Handle the response
-            if (result.ReturnCode == "1")
-            {
-                Console.WriteLine($"Success! Gateway URL: {result.GatewayURL}");
-                Console.WriteLine($"Response URL: {result.ResponseURL}");
-                // Redirect user to gateway URL for signing
-            }
-            else
-            {
-                Console.WriteLine($"Error: {result.ErrorMsg}");
-            }
+            Console.WriteLine($"Success! Gateway Parameter: {result.GatewayParameter}");
+            // Redirect user to gateway for authentication
         }
-        catch (Exception e)
+        else
         {
-            Console.WriteLine(e.Message);
+            Console.WriteLine($"Error: {result.ErrorMessage} (Code: {result.ErrorCode})");
         }
     }
 }
@@ -181,155 +147,190 @@ public class QuickStart
 
 ---
 
+## New Features
+
+### 1. Builder Pattern (NEW!)
+
+Easy-to-use fluent API for creating signing inputs:
+
+```csharp
+var input = new eSignInputBuilder()
+    .SetDocBase64(pdfBase64)
+    .SetDocInfo("Invoice_2024")
+    .SetSignedBy("John Doe")
+    .SetLocation("Los Angeles, CA")
+    .SetReason("Invoice Approval")
+    .SignAllPages()
+    .SetCoordinates(eSign.Coordinates.Bottom_Right)
+    .SetFontSize(10)
+    .ShowGreenTick()
+    .EnableCoSign()
+    .Build();
+```
+
+### 2. Text Search-Based Signature Placement (NEW!)
+
+Automatically find text in PDF and place signature:
+
+```csharp
+// Simple: Find "Sign here:" and place signature to the right
+var input = new eSignInputBuilder()
+    .SetDocBase64(pdfBase64)
+    .SetDocInfo("Contract")
+    .SearchAndPlaceSignature("Sign here:", out var searchResult)
+    .SetSignedBy("Jane Smith")
+    .SetLocation("Boston, MA")
+    .Build();
+
+// Check if text was found
+if (!searchResult.Found)
+{
+    Console.WriteLine($"Text not found: {searchResult.ErrorMessage}");
+    // Fallback to fixed coordinates...
+}
+else
+{
+    Console.WriteLine($"✅ Signature placed on page {searchResult.PageNumber}");
+}
+```
+
+### 3. Advanced Text Search with Custom Placement
+
+```csharp
+var searchConfig = new PdfTextSearchSignature
+{
+    SearchText = "Authorized Signature:",
+    SignatureWidth = 200,
+    SignatureHeight = 80,
+    XOffset = 15,
+    YOffset = -5,
+    PageNumber = 1,              // Search only page 1
+    MatchIndex = 0,              // First occurrence
+    IgnoreCase = true,           // Case-insensitive
+    Placement = SignaturePlacement.Below
+};
+
+var input = new eSignInputBuilder()
+    .SetDocBase64(pdfBase64)
+    .SetDocInfo("Agreement")
+    .SetSignaturePositionByTextSearch(searchConfig, out var result)
+    .SetSignedBy("Michael Brown")
+    .Build();
+
+if (result.Found)
+{
+    Console.WriteLine($"Signature at: {result.CoordinateString}");
+}
+```
+
+---
+
 ## Integration Guide
 
-### ASP.NET Web Forms Integration
+### ASP.NET Core Integration
 
 ```csharp
-// In your code-behind (.aspx.cs)
-protected void SignDocument_Click(object sender, EventArgs e)
+// Startup.cs or Program.cs
+public void ConfigureServices(IServiceCollection services)
 {
-    var settings = new eSignSettings
+    // Register eSign as a scoped service
+    services.AddScoped<eSign>(provider =>
     {
-        ASPID = ConfigurationManager.AppSettings["eSignASPID"],
-        Gateway_URL = ConfigurationManager.AppSettings["eSignGatewayURL"],
-        ResponseURL = Request.Url.GetLeftPart(UriPartial.Authority) + "/Callback.aspx"
-    };
-
-    var userInfo = new UserInfoBuilder()
-        .SeteMail(txtEmail.Text)
-        .SetFirstname(txtFirstName.Text)
-        .SetLastname(txtLastName.Text)
-        .SetPhoneNumber(txtPhone.Text)
-        .Build();
-
-    var input = new eSignInputBuilder()
-        .SeteSignSettings(settings)
-        .SetUserInfo(userInfo)
-        .SetPDFBase64(GetPdfBase64())
-        .SetCoordinates(Coordinates.BOTTOMRIGHT)
-        .SetAuthMode(AuthMode.OTP)
-        .Build();
-
-    var esign = new eSign.eSign();
-    var result = esign.GenerateGatewayParameters(input);
-
-    if (result.ReturnCode == "1")
-    {
-        Response.Redirect(result.GatewayURL);
-    }
-    else
-    {
-        lblError.Text = result.ErrorMsg;
-    }
+        var config = provider.GetRequiredService<IConfiguration>();
+        return new eSign(
+            pfxFilePath: config["eSign:PfxFilePath"],
+            pfxPassword: config["eSign:PfxPassword"],
+            pfxAlias: config["eSign:PfxAlias"],
+            isProxyRequired: false,
+            proxyIP: null,
+            proxyPort: 0,
+            proxyUserName: null,
+            proxyPassword: null,
+            aspID: config["eSign:ASPID"],
+            eSignURL: config["eSign:GatewayURL"],
+            eSignURLV2: config["eSign:GatewayURLV2"],
+            eSignCheckStatusURL: config["eSign:StatusURL"]
+        );
+    });
 }
 ```
 
-In `Web.config`:
-```xml
-<appSettings>
-  <add key="eSignASPID" value="YOUR_ASP_ID" />
-  <add key="eSignGatewayURL" value="https://gateway.example.com" />
-</appSettings>
+In `appsettings.json`:
+```json
+{
+  "eSign": {
+    "ASPID": "YOUR_ASP_ID",
+    "GatewayURL": "https://gateway.example.com/api/2.1/",
+    "GatewayURLV2": "https://gateway.example.com/api/2.5/",
+    "StatusURL": "https://status.example.com",
+    "PfxFilePath": "certificates/signing.pfx",
+    "PfxPassword": "your-password",
+    "PfxAlias": "alias"
+  }
+}
 ```
 
-### ASP.NET MVC Integration
+### Controller Example
 
 ```csharp
-public class SigningController : Controller
+[ApiController]
+[Route("api/[controller]")]
+public class SigningController : ControllerBase
 {
-    [HttpPost]
-    public ActionResult InitiateSigning(SigningRequest request)
+    private readonly eSign _eSignService;
+
+    public SigningController(eSign eSignService)
     {
-        var settings = new eSignSettings
-        {
-            ASPID = ConfigurationManager.AppSettings["eSignASPID"],
-            Gateway_URL = ConfigurationManager.AppSettings["eSignGatewayURL"],
-            ResponseURL = Url.Action("Callback", "Signing", null, Request.Url.Scheme)
-        };
-
-        var userInfo = new UserInfoBuilder()
-            .SeteMail(request.Email)
-            .SetFirstname(request.FirstName)
-            .SetLastname(request.LastName)
-            .SetPhoneNumber(request.Phone)
-            .Build();
-
-        var input = new eSignInputBuilder()
-            .SeteSignSettings(settings)
-            .SetUserInfo(userInfo)
-            .SetPDFBase64(request.PdfBase64)
-            .Build();
-
-        var esign = new eSign.eSign();
-        var result = esign.GenerateGatewayParameters(input);
-
-        if (result.ReturnCode == "1")
-        {
-            return Redirect(result.GatewayURL);
-        }
-
-        return View("Error", result.ErrorMsg);
+        _eSignService = eSignService;
     }
 
-    [HttpPost]
-    public ActionResult Callback(string response)
+    [HttpPost("initiate")]
+    public IActionResult InitiateSigning([FromBody] SigningRequest request)
     {
-        var esign = new eSign.eSign();
-        var result = esign.CheckTransactionStatus(
-            ConfigurationManager.AppSettings["eSignASPID"],
-            Request.Form["txnId"],
-            ConfigurationManager.AppSettings["eSignGatewayURL"]
+        // Create signing input
+        var input = new eSignInputBuilder()
+            .SetDocBase64(request.PdfBase64)
+            .SetDocInfo(request.DocumentName)
+            .SearchAndPlaceSignature(request.SearchText, out var searchResult)
+            .SetSignedBy(request.SignerName)
+            .SetLocation(request.Location)
+            .Build();
+
+        // Get gateway parameters
+        var result = _eSignService.GetGateWayParam(
+            new List<eSignInput> { input },
+            signerID: request.SignerId,
+            transactionID: Guid.NewGuid().ToString(),
+            resposeURL: "https://yourapp.com/api/signing/callback",
+            redirectUrl: "https://yourapp.com/success",
+            tempFolderPath: Path.GetTempPath()
         );
 
-        if (result.ReturnCode == "1")
+        if (result.ReturnStatus == eSign.status.Success)
         {
-            // Save signed document
-            byte[] signedPdf = Convert.FromBase64String(result.SignedDoc);
-            // Process the signed PDF
-            return View("Success");
+            return Ok(new { gatewayUrl = result.GatewayParameter });
         }
 
-        return View("Error", result.ErrorMsg);
+        return BadRequest(new { error = result.ErrorMessage });
     }
-}
-```
 
-### Windows Forms Integration
-
-```csharp
-private void btnSign_Click(object sender, EventArgs e)
-{
-    var settings = new eSignSettings
+    [HttpPost("callback")]
+    public IActionResult HandleCallback([FromForm] string responseXML)
     {
-        ASPID = Properties.Settings.Default.eSignASPID,
-        Gateway_URL = Properties.Settings.Default.eSignGatewayURL,
-        ResponseURL = "http://localhost:8080/callback"
-    };
+        // Process the signed document
+        var result = _eSignService.GetSigedDocument(
+            responseXML,
+            "path/to/presigned/file"
+        );
 
-    var userInfo = new UserInfoBuilder()
-        .SeteMail(txtEmail.Text)
-        .SetFirstname(txtFirstName.Text)
-        .SetLastname(txtLastName.Text)
-        .SetPhoneNumber(txtPhone.Text)
-        .Build();
+        if (result.ReturnStatus == eSign.status.Success)
+        {
+            string signedPdfBase64 = result.ReturnValues[0].SignedDocument;
+            // Save or process the signed document
+            return Ok("Document signed successfully");
+        }
 
-    var input = new eSignInputBuilder()
-        .SeteSignSettings(settings)
-        .SetUserInfo(userInfo)
-        .SetPDFBase64(GetPdfBase64FromFile())
-        .Build();
-
-    var esign = new eSign.eSign();
-    var result = esign.GenerateGatewayParameters(input);
-
-    if (result.ReturnCode == "1")
-    {
-        System.Diagnostics.Process.Start(result.GatewayURL);
-    }
-    else
-    {
-        MessageBox.Show(result.ErrorMsg, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        return BadRequest("Signing failed");
     }
 }
 ```
@@ -341,151 +342,148 @@ private void btnSign_Click(object sender, EventArgs e)
 ### Main Classes
 
 #### `eSign`
-The main facade class for all signing operations.
+Main class for signing operations.
+
+**Constructor**:
+```csharp
+public eSign(
+    string pfxFilePath,           // Path to certificate file
+    string pfxPassword,           // Certificate password
+    string pfxAlias,              // Certificate alias
+    bool isProxyRequired,         // Use proxy?
+    string proxyIP,               // Proxy IP (if required)
+    int proxyPort,                // Proxy port (if required)
+    string proxyUserName,         // Proxy username (if required)
+    string proxyPassword,         // Proxy password (if required)
+    string aspID,                 // Application Service Provider ID
+    string eSignURL,              // Gateway URL
+    string eSignURLV2,            // Gateway URL V2
+    string eSignCheckStatusURL    // Status check URL
+)
+```
 
 **Key Methods**:
-- `GenerateGatewayParameters(eSignInput input)` - Generate parameters for signing gateway
-- `CheckTransactionStatus(string aspId, string txnId, string gatewayUrl)` - Check signing status
-- `VerifySignature(string signedPdfBase64)` - Verify digital signature
-- `SignDocument(eSignInput input, string pkcs12Path, string password)` - Direct document signing
+- `GetGateWayParam()` - Generate parameters for signing gateway
+- `GetSigedDocument()` - Retrieve signed document after gateway callback
+- `GetStatus()` - Check transaction status
 
-#### `eSignInputBuilder`
-Builder pattern for creating `eSignInput` objects.
+#### `eSignInputBuilder` (NEW!)
+Builder for creating `eSignInput` objects.
 
-**Example**:
-```csharp
-var input = new eSignInputBuilder()
-    .SeteSignSettings(settings)
-    .SetUserInfo(userInfo)
-    .SetPDFBase64(pdfBase64)
-    .SetCoordinates(Coordinates.BOTTOMRIGHT)
-    .SetAuthMode(AuthMode.OTP)
-    .SetAppearanceType(AppearanceType.STANDARD)
-    .SetPageNo(PageNo.ALL)
-    .Build();
-```
+**Common Methods**:
+- `SetDocBase64(string)` - Set PDF content
+- `SetDocInfo(string)` - Set document identifier
+- `SetSignedBy(string)` - Set signer name
+- `SetLocation(string)` - Set signing location
+- `SetReason(string)` - Set signing reason
+- `SignAllPages()` / `SignFirstPage()` / `SignLastPage()` - Page selection
+- `SetCoordinates(eSign.Coordinates)` - Set position
+- `SearchAndPlaceSignature(string, out PdfTextSearchResult)` - **NEW: Text search**
+- `Build()` - Create eSignInput object
 
-#### `eSignSettings`
-Configuration holder for eSign service settings.
+#### `PdfTextSearchSignature` (NEW!)
+Configuration for text search-based positioning.
 
 **Properties**:
-- `ASPID` - Application Service Provider ID (required)
-- `Gateway_URL` - eSign gateway URL (required)
-- `ResponseURL` - Callback URL for async responses (required)
-- `Timeout` - Connection timeout in milliseconds (default: 30000)
-- `ProxyHost`, `ProxyPort`, `ProxyUserID`, `ProxyUserPassword` - Proxy configuration
-
-#### `UserInfoBuilder`
-Builder for creating user information objects.
-
-**Example**:
-```csharp
-var user = new UserInfoBuilder()
-    .SeteMail("user@example.com")
-    .SetFirstname("John")
-    .SetLastname("Doe")
-    .SetPhoneNumber("9876543210")
-    .SetCity("Bangalore")
-    .SetState("Karnataka")
-    .SetCountry("India")
-    .Build();
-```
+- `SearchText` - Text to find in PDF
+- `SignatureWidth` / `SignatureHeight` - Signature box dimensions
+- `XOffset` / `YOffset` - Position offsets
+- `PageNumber` - Specific page to search (optional)
+- `MatchIndex` - Which occurrence to use (0 = first)
+- `IgnoreCase` - Case-insensitive search
+- `Placement` - Position relative to found text
 
 ### Enumerations
 
-#### `AuthMode`
-Authentication methods:
-- `OTP` - One-Time Password
-- `FP` - Fingerprint
-- `IRIS` - IRIS recognition
-- `FACE` - Face recognition
+#### `eSign.Coordinates`
+```csharp
+Top_Left, Top_Center, Top_Right,
+Middle_Left, Middle_Center, Middle_Right,
+Bottom_Left, Bottom_Center, Bottom_Right
+```
 
-#### `AppearanceType`
-Signature appearance types:
-- `STANDARD` - Standard signature
-- `SIGNATUREIMG` - Image-based signature
-- `ONELINER` - Single line signature
-- `ADVANCED` - Advanced signature with custom styling
-- `COLOREDGRAPHIC` - Colored graphics signature
-- `BGIMG` - Background image signature
+#### `eSign.PageToBeSigned`
+```csharp
+ALL, FIRST, LAST, EVEN, ODD, SPECIFY, PAGE_LEVEL
+```
 
-#### `Coordinates`
-9-point positioning system:
-- `TOPLEFT`, `TOPMIDDLE`, `TOPRIGHT`
-- `CENTERLEFT`, `CENTERMIDDLE`, `CENTERRIGHT`
-- `BOTTOMLEFT`, `BOTTOMMIDDLE`, `BOTTOMRIGHT`
+#### `eSign.DocType`
+```csharp
+Pdf, Hash, eMandate
+```
 
-#### `PageNo`
-Page selection for signing:
-- `ALL` - All pages
-- `EVEN` - Even pages only
-- `ODD` - Odd pages only
-- `LAST` - Last page only
-- `FIRST` - First page only
-- `SPECIFY` - Specify custom pages
+#### `eSign.AuthMode`
+```csharp
+OTP, FP, IRIS, FACE
+```
+
+#### `SignaturePlacement` (NEW!)
+```csharp
+RightOf, LeftOf, Above, Below, AtPosition
+```
 
 ---
 
-## Advanced Features
+## Examples
 
-### Custom Signature Appearance
+### Example 1: Sign with Custom Coordinates
 
 ```csharp
-var advSig = new AdvanceSignature
-{
-    SignerName = "John Doe",
-    SignerLocation = "Bangalore",
-    SignerReason = "Document Approval",
-    SignerContactInfo = "+91-9876543210"
-};
-
-var style = new CustomStyle
-{
-    BackgroundColor = "#FFFFFF",
-    TextColor = "#000000",
-    FontSize = 12
-};
-
 var input = new eSignInputBuilder()
-    // ... other settings
-    .SetAppearanceType(AppearanceType.ADVANCED)
-    .SetAdvanceSignature(advSig)
-    .SetCustomStyle(style)
+    .SetDocBase64(pdfBase64)
+    .SetDocInfo("Document_001")
+    .SetCustomCoordinates("100,150,250,200")  // x1,y1,x2,y2
+    .SetSignedBy("User Name")
     .Build();
 ```
 
-### Proxy Configuration
+### Example 2: Sign Specific Pages
 
 ```csharp
-var settings = new eSignSettings
-{
-    ASPID = "YOUR_ASP_ID",
-    Gateway_URL = "https://gateway.example.com",
-    ProxyHost = "proxy.company.com",
-    ProxyPort = 8080,
-    ProxyUserID = "proxyuser",
-    ProxyUserPassword = "proxypass"
-};
+var input = new eSignInputBuilder()
+    .SetDocBase64(pdfBase64)
+    .SetDocInfo("Multi_Page_Doc")
+    .SignSpecificPages("1,3,5,7")  // Pages 1, 3, 5, and 7
+    .SetCoordinates(eSign.Coordinates.Bottom_Right)
+    .SetSignedBy("User Name")
+    .Build();
 ```
 
----
+### Example 3: Page-Level Coordinates
 
-## License
+```csharp
+var input = new eSignInputBuilder()
+    .SetDocBase64(pdfBase64)
+    .SetDocInfo("Complex_Doc")
+    .SetPageLevelCoordinates("1,50,700,200,750;2,100,650,250,700")
+    // Page 1: (50,700) to (200,750)
+    // Page 2: (100,650) to (250,700)
+    .SetSignedBy("User Name")
+    .Build();
+```
 
-This project is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**.
+### Example 4: Hash Signing
 
-### Important Licensing Notes:
+```csharp
+var input = new eSignInputBuilder()
+    .ForHashSigning(hashValue, "DocumentHash_12345")
+    .SetPdfUrl("https://example.com/document.pdf")
+    .Build();
+```
 
-1. **AGPL-3.0 Requirements**:
-   - Any modifications to this library must be open-sourced
-   - Applications using this library over a network must provide source code to users
-   - Commercial use is allowed, but derivative works must remain open source
+### Example 5: eMandate XML Signing
 
-2. **Embedded Libraries**:
-   - **iText PDF Library**: This library embeds iText, which is also AGPL-licensed
-   - **BouncyCastle**: Licensed under MIT-style license (permissive)
+```csharp
+var input = new eSignInputBuilder()
+    .ForeMandateSigning(xmlContent, "Mandate_67890")
+    .SetPdfUrl("https://example.com/mandate.xml")
+    .Build();
+```
 
-See [LICENSE.txt](LICENSE.txt) for full license text.
+For more examples, see:
+- [USAGE_EXAMPLES.md](eSign/USAGE_EXAMPLES.md)
+- [TEXT_SEARCH_EXAMPLES.cs](eSign/TEXT_SEARCH_EXAMPLES.cs)
+- [ERROR_HANDLING_PATTERN.md](ERROR_HANDLING_PATTERN.md)
 
 ---
 
@@ -493,34 +491,56 @@ See [LICENSE.txt](LICENSE.txt) for full license text.
 
 ### Important Security Warnings
 
-1. **Credential Handling**:
-   - Never hardcode credentials in source code
-   - Use `Web.config` or `App.config` for configuration
-   - Use `ConfigurationManager.AppSettings` for sensitive values
-   - Consider using encryption for connection strings
+1. **Certificate Security**:
+   - Store certificates securely (Azure Key Vault, AWS Secrets Manager)
+   - Never commit certificates to source control
+   - Use strong passwords for certificate files
+   - Rotate certificates regularly
 
-2. **Input Validation**:
-   - Always validate and sanitize user inputs
-   - Validate PDF content before processing
-   - Sanitize email addresses and phone numbers
+2. **Credential Management**:
+   ```csharp
+   // ✅ GOOD - Use environment variables or configuration
+   aspID: Environment.GetEnvironmentVariable("ESIGN_ASP_ID")
 
-3. **Logging**:
-   - Review log configurations to avoid logging sensitive data
-   - Don't log passwords or API keys
+   // ❌ BAD - Never hardcode
+   aspID: "hardcoded_asp_id"
+   ```
 
-### Recommended Security Practices
+3. **Input Validation**:
+   - Always validate PDF content before processing
+   - Sanitize user inputs (names, locations, reasons)
+   - Validate Base64-encoded content
+
+4. **Error Handling**:
+   - Don't expose sensitive information in error messages
+   - Log errors securely without PII
+   - Use the built-in error handling pattern
+
+5. **Network Security**:
+   - Use HTTPS for all gateway communications
+   - Verify SSL/TLS certificates
+   - Configure proxy settings securely
+
+### Best Practices
 
 ```csharp
-// Use configuration files for credentials
-var settings = new eSignSettings
-{
-    ASPID = ConfigurationManager.AppSettings["eSignASPID"],
-    Gateway_URL = ConfigurationManager.AppSettings["eSignGatewayURL"]
-};
+// Store sensitive configuration securely
+var aspId = Configuration["eSign:ASPID"];
+var pfxPassword = Configuration["eSign:PfxPassword"];
 
-// Or use encrypted configuration
-var encryptedSection = (AppSettingsSection)ConfigurationManager
-    .GetSection("secureAppSettings");
+// Validate inputs
+if (!IsValidBase64(pdfBase64))
+{
+    throw new ArgumentException("Invalid PDF content");
+}
+
+// Use proper error handling (no exceptions thrown)
+var input = builder.SearchAndPlaceSignature(searchText, out var result);
+if (!result.Found)
+{
+    // Handle gracefully without crashing
+    logger.LogWarning($"Text search failed: {result.ErrorMessage}");
+}
 ```
 
 ---
@@ -529,42 +549,65 @@ var encryptedSection = (AppSettingsSection)ConfigurationManager
 
 ### Common Issues
 
-**Issue**: `FileNotFoundException` or DLL loading errors
-**Solution**: Ensure all dependent DLLs are in the same directory or in the GAC
+**Issue**: Text search fails
+**Solution**: Check if the search text exists in the PDF, use case-insensitive search, or provide fallback coordinates
 
-**Issue**: SSL/TLS errors
-**Solution**: Ensure .NET Framework 4.8 is installed and TLS 1.2 is enabled
+**Issue**: Certificate errors
+**Solution**: Verify certificate path, password, and alias are correct
 
-**Issue**: "Invalid ASPID" errors
-**Solution**: Verify your ASPID is correctly registered
+**Issue**: Gateway timeout
+**Solution**: Check network connectivity and gateway URL configuration
 
----
-
-## Support and Contact
-
-For issues, questions, or contributions:
-- Open an issue on GitHub
-- Contact: [your-contact@example.com]
+**Issue**: Invalid coordinates
+**Solution**: Ensure coordinates are within PDF page bounds (standard A4: 595 x 842 points)
 
 ---
 
-## Changelog
+## License
 
-See [CHANGELOG.md](CHANGELOG.md) for version history.
+This project is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**.
+
+**Important**: This library includes iText PDF library, which is also AGPL-licensed. For commercial use without open-sourcing your application, you may need a commercial license from iText Software.
+
+See [LICENSE.txt](LICENSE.txt) for details and [SECURITY.md](SECURITY.md) for security considerations.
 
 ---
 
 ## Contributing
 
-We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+### Quick Contribution Guide
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/your-feature`
+3. Make your changes
+4. Run tests and ensure build succeeds
+5. Commit: `git commit -m "feat: your feature description"`
+6. Push: `git push origin feature/your-feature`
+7. Create a Pull Request
+
+---
+
+## Changelog
+
+### Version 2.0.0.17 (Latest)
+- ✅ Builder pattern for eSignInput creation
+- ✅ PDF text search with automatic signature placement
+- ✅ Multiple placement strategies (RightOf, LeftOf, Above, Below, AtPosition)
+- ✅ Graceful error handling (no exceptions)
+- ✅ Comprehensive documentation and examples
+- ✅ Cross-platform support (.NET Standard 2.0)
 
 ---
 
 ## Acknowledgments
 
-- **iText PDF Library** - PDF manipulation capabilities
+- **iText PDF Library** - PDF manipulation
 - **BouncyCastle** - Cryptographic operations
+- **System.Security.Cryptography.Xml** - XML signature support
 
 ---
 
 **Built with .NET Framework | Powered by Digital Signatures**
+
+Repository: https://github.com/emudhra-integration-sdk/dotnet-framework-esign-sdk
