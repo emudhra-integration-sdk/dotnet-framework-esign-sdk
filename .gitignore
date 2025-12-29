@@ -132,3 +132,12 @@ DocProject/Help/html
 *.Publish.xml
 *.pubxml
 *.publishproj
+
+# Test/Demo projects (not part of library)
+/TestApp/
+TestTextSearch.cs
+TestInspectorSignature.cs
+
+# Internal documentation (not for public repo)
+TEXT_SEARCH_FIX_SUMMARY.md
+COMMIT_MESSAGE.txt

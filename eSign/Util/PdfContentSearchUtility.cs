@@ -146,6 +146,9 @@ namespace eSignASPLibrary.Util
                 var strategy = new TextSearchStrategy(searchText, ignoreCase);
                 PdfTextExtractor.GetTextFromPage(reader, pageNumber, strategy);
 
+                // Perform final search across all accumulated chunks
+                strategy.FinalizeSearch();
+
                 // Get all matches from the strategy
                 foreach (var match in strategy.Matches)
                 {
@@ -234,6 +237,7 @@ namespace eSignASPLibrary.Util
 
         /// <summary>
         /// Custom text extraction strategy that captures text with position information.
+        /// Handles multi-chunk text searches by accumulating all text chunks.
         /// </summary>
         private class TextSearchStrategy : ITextExtractionStrategy
         {
@@ -241,6 +245,9 @@ namespace eSignASPLibrary.Util
             private readonly bool _ignoreCase;
             private readonly StringComparison _comparison;
             public List<TextLocationInfo> Matches { get; private set; }
+
+            // Store all text chunks with their position info
+            private List<TextChunkInfo> _textChunks = new List<TextChunkInfo>();
 
             public TextSearchStrategy(string searchText, bool ignoreCase)
             {
@@ -252,6 +259,7 @@ namespace eSignASPLibrary.Util
 
             public void BeginTextBlock()
             {
+                // Don't clear chunks - we want to accumulate across all text blocks on the page
             }
 
             public void RenderText(TextRenderInfo renderInfo)
@@ -261,36 +269,109 @@ namespace eSignASPLibrary.Util
                 if (string.IsNullOrEmpty(text))
                     return;
 
-                // Check if this text chunk contains the search text
-                if (text.IndexOf(_searchText, _comparison) >= 0)
+                // Store all text chunks with their position information
+                LineSegment baseline = renderInfo.GetBaseline();
+                Vector startPoint = baseline.GetStartPoint();
+                Vector endPoint = baseline.GetEndPoint();
+
+                float x = startPoint[0];
+                float y = startPoint[1];
+                float width = endPoint[0] - startPoint[0];
+                float height = renderInfo.GetAscentLine().GetStartPoint()[1] -
+                               renderInfo.GetDescentLine().GetStartPoint()[1];
+
+                _textChunks.Add(new TextChunkInfo
                 {
-                    // Get the baseline (bottom-left position of the text)
-                    LineSegment baseline = renderInfo.GetBaseline();
-                    Vector startPoint = baseline.GetStartPoint();
-                    Vector endPoint = baseline.GetEndPoint();
-
-                    // Calculate text dimensions
-                    float x = startPoint[0];
-                    float y = startPoint[1];
-                    float width = endPoint[0] - startPoint[0];
-
-                    // Estimate height based on font size
-                    float height = renderInfo.GetAscentLine().GetStartPoint()[1] -
-                                   renderInfo.GetDescentLine().GetStartPoint()[1];
-
-                    Matches.Add(new TextLocationInfo
-                    {
-                        Text = text,
-                        X = x,
-                        Y = y,
-                        Width = width,
-                        Height = height
-                    });
-                }
+                    Text = text,
+                    X = x,
+                    Y = y,
+                    Width = width,
+                    Height = height
+                });
             }
 
             public void EndTextBlock()
             {
+                // Don't search here - wait until all text blocks are processed
+            }
+
+            /// <summary>
+            /// Call this after all text extraction is complete to perform the search.
+            /// </summary>
+            public void FinalizeSearch()
+            {
+                SearchAcrossChunks();
+            }
+
+            private void SearchAcrossChunks()
+            {
+                if (_textChunks.Count == 0)
+                    return;
+
+                // Build the full text from all chunks
+                string fullText = string.Join("", _textChunks.ConvertAll(c => c.Text));
+
+                // Search for all occurrences
+                int searchIndex = 0;
+                while (searchIndex < fullText.Length)
+                {
+                    int foundIndex = fullText.IndexOf(_searchText, searchIndex, _comparison);
+                    if (foundIndex < 0)
+                        break;
+
+                    // Find which chunk(s) contain this match
+                    int currentPos = 0;
+                    int matchStartChunk = -1;
+                    int matchEndChunk = -1;
+
+                    for (int i = 0; i < _textChunks.Count; i++)
+                    {
+                        int chunkLength = _textChunks[i].Text.Length;
+
+                        if (matchStartChunk < 0 && foundIndex >= currentPos && foundIndex < currentPos + chunkLength)
+                        {
+                            matchStartChunk = i;
+                        }
+
+                        if (foundIndex + _searchText.Length > currentPos && foundIndex + _searchText.Length <= currentPos + chunkLength)
+                        {
+                            matchEndChunk = i;
+                            break;
+                        }
+
+                        currentPos += chunkLength;
+                    }
+
+                    // If we didn't find end chunk, it might be at the very end
+                    if (matchEndChunk < 0 && matchStartChunk >= 0)
+                    {
+                        matchEndChunk = _textChunks.Count - 1;
+                    }
+
+                    if (matchStartChunk >= 0 && matchEndChunk >= 0)
+                    {
+                        // Use the position of the first chunk where match starts
+                        var startChunk = _textChunks[matchStartChunk];
+                        var endChunk = _textChunks[matchEndChunk];
+
+                        // Calculate the bounding box for the entire match
+                        float matchX = startChunk.X;
+                        float matchY = Math.Min(startChunk.Y, endChunk.Y);
+                        float matchWidth = (endChunk.X + endChunk.Width) - startChunk.X;
+                        float matchHeight = Math.Max(startChunk.Height, endChunk.Height);
+
+                        Matches.Add(new TextLocationInfo
+                        {
+                            Text = fullText.Substring(foundIndex, _searchText.Length),
+                            X = matchX,
+                            Y = matchY,
+                            Width = matchWidth,
+                            Height = matchHeight
+                        });
+                    }
+
+                    searchIndex = foundIndex + 1; // Continue searching for more occurrences
+                }
             }
 
             public void RenderImage(ImageRenderInfo renderInfo)
@@ -300,6 +381,18 @@ namespace eSignASPLibrary.Util
             public string GetResultantText()
             {
                 return string.Empty;
+            }
+
+            /// <summary>
+            /// Stores a single text chunk with its position.
+            /// </summary>
+            private class TextChunkInfo
+            {
+                public string Text { get; set; }
+                public float X { get; set; }
+                public float Y { get; set; }
+                public float Width { get; set; }
+                public float Height { get; set; }
             }
         }
 

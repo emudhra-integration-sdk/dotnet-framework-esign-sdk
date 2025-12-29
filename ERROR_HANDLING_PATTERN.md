@@ -36,9 +36,10 @@ catch (Exception ex)
 
 ```csharp
 // ✅ Application continues even if text not found
+PdfTextSearchResult searchResult;
 var input = new eSignInputBuilder()
     .SetDocBase64(pdfBase64)
-    .SearchAndPlaceSignature("Sign here:", out var searchResult)
+    .SearchAndPlaceSignature("Sign here:", out searchResult)
     .SetSignedBy("John Doe")
     .Build();
 
@@ -66,9 +67,10 @@ else
 ```csharp
 public eSignServiceReturn SignDocument(string pdfBase64, string searchText)
 {
+    PdfTextSearchResult searchResult;
     var input = new eSignInputBuilder()
         .SetDocBase64(pdfBase64)
-        .SearchAndPlaceSignature(searchText, out var searchResult)
+        .SearchAndPlaceSignature(searchText, out searchResult)
         .SetSignedBy("User")
         .Build();
 
@@ -112,9 +114,10 @@ public eSignServiceReturn SignWithValidation(string pdfBase64)
     }
 
     // Proceed with search
+    PdfTextSearchResult searchResult;
     var input = new eSignInputBuilder()
         .SetDocBase64(pdfBase64)
-        .SetSignaturePositionByTextSearch(searchConfig, out var searchResult)
+        .SetSignaturePositionByTextSearch(searchConfig, out searchResult)
         .Build();
 
     // ✅ Check search result
@@ -176,9 +179,10 @@ public class PdfTextSearchResult
 ### 1. Text Not Found
 
 ```csharp
+PdfTextSearchResult result;
 var input = new eSignInputBuilder()
     .SetDocBase64(pdfBase64)
-    .SearchAndPlaceSignature("NonExistentText", out var result)
+    .SearchAndPlaceSignature("NonExistentText", out result)
     .Build();
 
 if (!result.Found)
@@ -198,9 +202,10 @@ var searchConfig = new PdfTextSearchSignature
     PageNumber = 999  // PDF only has 5 pages
 };
 
+PdfTextSearchResult result;
 var input = new eSignInputBuilder()
     .SetDocBase64(pdfBase64)
-    .SetSignaturePositionByTextSearch(searchConfig, out var result)
+    .SetSignaturePositionByTextSearch(searchConfig, out result)
     .Build();
 
 if (!result.Found)
@@ -229,9 +234,10 @@ if (!searchConfig.Validate(out string error))
 ### 4. PDF Decode Error
 
 ```csharp
+PdfTextSearchResult result;
 var input = new eSignInputBuilder()
     .SetDocBase64("invalid_base64")
-    .SearchAndPlaceSignature("Text", out var result)
+    .SearchAndPlaceSignature("Text", out result)
     .Build();
 
 if (!result.Found)
@@ -244,9 +250,10 @@ if (!result.Found)
 ### 5. DocBase64 Not Set
 
 ```csharp
+PdfTextSearchResult result;
 var input = new eSignInputBuilder()
     // Forgot to set DocBase64!
-    .SearchAndPlaceSignature("Text", out var result)
+    .SearchAndPlaceSignature("Text", out result)
     .Build();
 
 if (!result.Found)
@@ -264,10 +271,11 @@ if (!result.Found)
 public eSignServiceReturn CompleteSigningWorkflow(string pdfBase64)
 {
     // Step 1: Try text search
+    PdfTextSearchResult searchResult;
     var input = new eSignInputBuilder()
         .SetDocBase64(pdfBase64)
         .SetDocInfo("Document_001")
-        .SearchAndPlaceSignature("Sign here:", out var searchResult)
+        .SearchAndPlaceSignature("Sign here:", out searchResult)
         .SetSignedBy("John Doe")
         .SetLocation("New York")
         .SetReason("Approval")
@@ -370,8 +378,9 @@ catch (Exception ex)
 
 ### After (New - Use This)
 ```csharp
+PdfTextSearchResult result;
 var input = new eSignInputBuilder()
-    .SearchAndPlaceSignature("Text", out var result)
+    .SearchAndPlaceSignature("Text", out result)
     .Build();
 
 if (!result.Found)

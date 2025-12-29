@@ -13,14 +13,18 @@ namespace eSignASPLibrary.Examples
     {
         /// <summary>
         /// Example 1: Simple text search with error handling
+        /// Searches for text that may span multiple chunks (e.g., "Inspector's Signature")
         /// </summary>
         public static eSignServiceReturn Example1_SimpleTextSearch(string pdfBase64)
         {
             // Create input with text search
+            // The search now works across text chunks, so "Inspector's Signature" will be found
+            // even if the PDF stores it as separate chunks like "Inspector's " + "Signature"
+            PdfTextSearchResult searchResult;
             var input = new eSignInputBuilder()
                 .SetDocBase64(pdfBase64)
                 .SetDocInfo("Invoice_2024")
-                .SearchAndPlaceSignature("Sign here:", out var searchResult)
+                .SearchAndPlaceSignature("Sign here:", out searchResult)
                 .SetSignedBy("John Doe")
                 .SetLocation("New York")
                 .SetReason("Approval")
@@ -54,6 +58,40 @@ namespace eSignASPLibrary.Examples
         }
 
         /// <summary>
+        /// Example 8: Search for "Inspector's Signature" in inspection reports
+        /// </summary>
+        public static eSignServiceReturn Example8_InspectorSignature(string pdfBase64)
+        {
+            // Search for "Inspector's Signature" text
+            PdfTextSearchResult searchResult;
+            var input = new eSignInputBuilder()
+                .SetDocBase64(pdfBase64)
+                .SetDocInfo("Inspection_Report")
+                .SearchAndPlaceSignature("Inspector's Signature", 150, 60, SignaturePlacement.Below, 0, -10, out searchResult)
+                .SetSignedBy("Inspector Name")
+                .SetLocation("Inspection Site")
+                .SetReason("Inspection Completed")
+                .Build();
+
+            if (!searchResult.Found)
+            {
+                Console.WriteLine($"❌ Could not find 'Inspector's Signature': {searchResult.ErrorMessage}");
+                return new eSignServiceReturn
+                {
+                    ReturnStatus = eSign.status.Failure,
+                    ErrorCode = "TXT-404",
+                    ErrorMessage = searchResult.ErrorMessage
+                };
+            }
+
+            Console.WriteLine($"✅ Found 'Inspector's Signature' on page {searchResult.PageNumber}");
+            Console.WriteLine($"   Position: ({searchResult.TextX:F1}, {searchResult.TextY:F1})");
+            Console.WriteLine($"   Signature will be placed below at: {searchResult.CoordinateString}");
+
+            return ProcessSigning(new List<eSignInput> { input });
+        }
+
+        /// <summary>
         /// Example 2: Advanced text search with custom configuration
         /// </summary>
         public static eSignServiceReturn Example2_AdvancedSearch(string pdfBase64)
@@ -63,18 +101,14 @@ namespace eSignASPLibrary.Examples
                 SearchText = "Authorized Signature:",
                 SignatureWidth = 200,
                 SignatureHeight = 80,
-                XOffset = 15,
-                YOffset = -5,
-                PageNumber = 1,              // Search only page 1
-                MatchIndex = 0,              // First occurrence
-                IgnoreCase = true,           // Case-insensitive
                 Placement = SignaturePlacement.Below
             };
 
+            PdfTextSearchResult searchResult;
             var input = new eSignInputBuilder()
                 .SetDocBase64(pdfBase64)
                 .SetDocInfo("Contract_2024")
-                .SetSignaturePositionByTextSearch(searchConfig, out var searchResult)
+                .SetSignaturePositionByTextSearch(searchConfig, out searchResult)
                 .SetSignedBy("Jane Smith")
                 .SetLocation("Los Angeles")
                 .Build();
@@ -101,10 +135,11 @@ namespace eSignASPLibrary.Examples
             var inputs = new List<eSignInput>();
 
             // First signature - search for "Manager:"
+            PdfTextSearchResult result1;
             var input1 = new eSignInputBuilder()
                 .SetDocBase64(pdfBase64)
                 .SetDocInfo("Doc1")
-                .SearchAndPlaceSignature("Manager:", 10, 0, out var result1)
+                .SearchAndPlaceSignature("Manager:", 10, 0, out result1)
                 .SetSignedBy("Manager Name")
                 .Build();
 
@@ -126,10 +161,11 @@ namespace eSignASPLibrary.Examples
             }
 
             // Second signature - search for "Director:"
+            PdfTextSearchResult result2;
             var input2 = new eSignInputBuilder()
                 .SetDocBase64(pdfBase64)
                 .SetDocInfo("Doc2")
-                .SearchAndPlaceSignature("Director:", 10, 0, out var result2)
+                .SearchAndPlaceSignature("Director:", 10, 0, out result2)
                 .SetSignedBy("Director Name")
                 .Build();
 
@@ -162,10 +198,11 @@ namespace eSignASPLibrary.Examples
                 Placement = SignaturePlacement.RightOf
             };
 
+            PdfTextSearchResult searchResult;
             var input = new eSignInputBuilder()
                 .SetDocBase64(pdfBase64)
                 .SetDocInfo("Multi_Signer_Doc")
-                .SetSignaturePositionByTextSearch(searchConfig, out var searchResult)
+                .SetSignaturePositionByTextSearch(searchConfig, out searchResult)
                 .SetSignedBy("Second Signer")
                 .Build();
 
@@ -189,30 +226,34 @@ namespace eSignASPLibrary.Examples
         public static void Example5_PlacementStrategies(string pdfBase64)
         {
             // Place ABOVE text
+            PdfTextSearchResult result1;
             var inputAbove = new eSignInputBuilder()
                 .SetDocBase64(pdfBase64)
-                .SearchAndPlaceSignature("Name:", 150, 60, SignaturePlacement.Above, 0, 0, out var result1)
+                .SearchAndPlaceSignature("Name:", 150, 60, SignaturePlacement.Above, 0, 0, out result1)
                 .SetSignedBy("Person 1")
                 .Build();
 
             // Place BELOW text
+            PdfTextSearchResult result2;
             var inputBelow = new eSignInputBuilder()
                 .SetDocBase64(pdfBase64)
-                .SearchAndPlaceSignature("Title:", 150, 60, SignaturePlacement.Below, 0, 0, out var result2)
+                .SearchAndPlaceSignature("Title:", 150, 60, SignaturePlacement.Below, 0, 0, out result2)
                 .SetSignedBy("Person 2")
                 .Build();
 
             // Place to the LEFT
+            PdfTextSearchResult result3;
             var inputLeft = new eSignInputBuilder()
                 .SetDocBase64(pdfBase64)
-                .SearchAndPlaceSignature("Date:", 150, 60, SignaturePlacement.LeftOf, 0, 0, out var result3)
+                .SearchAndPlaceSignature("Date:", 150, 60, SignaturePlacement.LeftOf, 0, 0, out result3)
                 .SetSignedBy("Person 3")
                 .Build();
 
             // Place to the RIGHT (default)
+            PdfTextSearchResult result4;
             var inputRight = new eSignInputBuilder()
                 .SetDocBase64(pdfBase64)
-                .SearchAndPlaceSignature("Sign:", 150, 60, SignaturePlacement.RightOf, 0, 0, out var result4)
+                .SearchAndPlaceSignature("Sign:", 150, 60, SignaturePlacement.RightOf, 0, 0, out result4)
                 .SetSignedBy("Person 4")
                 .Build();
 
@@ -233,10 +274,11 @@ namespace eSignASPLibrary.Examples
             string location)
         {
             // Step 1: Try text search
+            PdfTextSearchResult searchResult;
             var input = new eSignInputBuilder()
                 .SetDocBase64(pdfBase64)
                 .SetDocInfo($"Doc_{DateTime.Now:yyyyMMdd_HHmmss}")
-                .SearchAndPlaceSignature(searchText, out var searchResult)
+                .SearchAndPlaceSignature(searchText, out searchResult)
                 .SetSignedBy(signerName)
                 .SetLocation(location)
                 .SetReason("Document Approval")
@@ -351,9 +393,10 @@ namespace eSignASPLibrary.Examples
             }
 
             // Configuration is valid, proceed with search
+            PdfTextSearchResult searchResult;
             var input = new eSignInputBuilder()
                 .SetDocBase64(pdfBase64)
-                .SetSignaturePositionByTextSearch(searchConfig, out var searchResult)
+                .SetSignaturePositionByTextSearch(searchConfig, out searchResult)
                 .SetSignedBy("User")
                 .Build();
 

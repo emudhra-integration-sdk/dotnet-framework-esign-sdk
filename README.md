@@ -37,7 +37,7 @@ A comprehensive .NET SDK for digital signature operations, providing PDF signing
 - **Enterprise Features**:
   - Proxy server support
   - Transaction management and verification
-  - Cross-platform support (.NET Standard 2.0)
+  - Windows support (.NET Framework 4.8)
 
 ---
 
@@ -170,14 +170,16 @@ var input = new eSignInputBuilder()
 
 ### 2. Text Search-Based Signature Placement (NEW!)
 
-Automatically find text in PDF and place signature:
+Automatically find text in PDF and place signature. The search engine now handles multi-chunk text, meaning it can find text like "Inspector's Signature" even when the PDF stores it as separate chunks (e.g., "Inspector's " + "Signature").
 
 ```csharp
 // Simple: Find "Sign here:" and place signature to the right
+// Works even if text spans multiple PDF text chunks
+PdfTextSearchResult searchResult;
 var input = new eSignInputBuilder()
     .SetDocBase64(pdfBase64)
     .SetDocInfo("Contract")
-    .SearchAndPlaceSignature("Sign here:", out var searchResult)
+    .SearchAndPlaceSignature("Sign here:", out searchResult)
     .SetSignedBy("Jane Smith")
     .SetLocation("Boston, MA")
     .Build();
@@ -192,6 +194,16 @@ else
 {
     Console.WriteLine($"✅ Signature placed on page {searchResult.PageNumber}");
 }
+```
+
+**Real-world Example:**
+```csharp
+// Find "Inspector's Signature" in inspection reports
+var input = new eSignInputBuilder()
+    .SetDocBase64(pdfBase64)
+    .SearchAndPlaceSignature("Inspector's Signature", 150, 60, SignaturePlacement.Below, out searchResult)
+    .SetSignedBy("Inspector Name")
+    .Build();
 ```
 
 ### 3. Advanced Text Search with Custom Placement
@@ -210,10 +222,11 @@ var searchConfig = new PdfTextSearchSignature
     Placement = SignaturePlacement.Below
 };
 
+PdfTextSearchResult result;
 var input = new eSignInputBuilder()
     .SetDocBase64(pdfBase64)
     .SetDocInfo("Agreement")
-    .SetSignaturePositionByTextSearch(searchConfig, out var result)
+    .SetSignaturePositionByTextSearch(searchConfig, out result)
     .SetSignedBy("Michael Brown")
     .Build();
 
@@ -288,10 +301,11 @@ public class SigningController : ControllerBase
     public IActionResult InitiateSigning([FromBody] SigningRequest request)
     {
         // Create signing input
+        PdfTextSearchResult searchResult;
         var input = new eSignInputBuilder()
             .SetDocBase64(request.PdfBase64)
             .SetDocInfo(request.DocumentName)
-            .SearchAndPlaceSignature(request.SearchText, out var searchResult)
+            .SearchAndPlaceSignature(request.SearchText, out searchResult)
             .SetSignedBy(request.SignerName)
             .SetLocation(request.Location)
             .Build();
@@ -535,7 +549,8 @@ if (!IsValidBase64(pdfBase64))
 }
 
 // Use proper error handling (no exceptions thrown)
-var input = builder.SearchAndPlaceSignature(searchText, out var result);
+PdfTextSearchResult result;
+var input = builder.SearchAndPlaceSignature(searchText, out result);
 if (!result.Found)
 {
     // Handle gracefully without crashing
@@ -596,7 +611,7 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 - ✅ Multiple placement strategies (RightOf, LeftOf, Above, Below, AtPosition)
 - ✅ Graceful error handling (no exceptions)
 - ✅ Comprehensive documentation and examples
-- ✅ Cross-platform support (.NET Standard 2.0)
+- ✅ C# 7.3 compatible syntax (pre-declared out variables)
 
 ---
 
