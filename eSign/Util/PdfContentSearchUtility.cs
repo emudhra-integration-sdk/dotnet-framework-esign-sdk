@@ -103,6 +103,31 @@ namespace eSignASPLibrary.Util
                     searchConfig.Placement
                 );
 
+                // Calculate coordinates for ALL matches
+                var allMatchDetails = new List<MatchDetail>();
+                foreach (var match in allMatches)
+                {
+                    var coords = CalculateSignatureCoordinates(
+                        match,
+                        searchConfig.SignatureWidth,
+                        searchConfig.SignatureHeight,
+                        searchConfig.XOffset,
+                        searchConfig.YOffset,
+                        searchConfig.Placement
+                    );
+
+                    allMatchDetails.Add(new MatchDetail
+                    {
+                        PageNumber = match.PageNumber,
+                        TextX = match.X,
+                        TextY = match.Y,
+                        SignatureX1 = coords.X1,
+                        SignatureY1 = coords.Y1,
+                        SignatureX2 = coords.X2,
+                        SignatureY2 = coords.Y2
+                    });
+                }
+
                 return new PdfTextSearchResult
                 {
                     Found = true,
@@ -116,7 +141,8 @@ namespace eSignASPLibrary.Util
                     SignatureX2 = signatureCoords.X2,
                     SignatureY2 = signatureCoords.Y2,
                     TotalMatches = allMatches.Count,
-                    FoundText = selectedMatch.Text
+                    FoundText = selectedMatch.Text,
+                    AllMatches = allMatchDetails
                 };
             }
             catch (Exception ex)
@@ -356,7 +382,7 @@ namespace eSignASPLibrary.Util
 
                         // Calculate the bounding box for the entire match
                         float matchX = startChunk.X;
-                        float matchY = Math.Min(startChunk.Y, endChunk.Y);
+                        float matchY = startChunk.Y; // Use Y from start chunk, not minimum
                         float matchWidth = (endChunk.X + endChunk.Width) - startChunk.X;
                         float matchHeight = Math.Max(startChunk.Height, endChunk.Height);
 

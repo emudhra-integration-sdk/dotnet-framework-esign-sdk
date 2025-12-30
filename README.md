@@ -8,6 +8,7 @@ A comprehensive .NET SDK for digital signature operations, providing PDF signing
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [New Features](#new-features)
+- [Complete Workflow Guide](#complete-workflow-guide)
 - [Integration Guide](#integration-guide)
 - [API Documentation](#api-documentation)
 - [Security Considerations](#security-considerations)
@@ -28,8 +29,10 @@ A comprehensive .NET SDK for digital signature operations, providing PDF signing
 - **Flexible Signature Positioning**:
   - 9-point coordinate system (Top/Middle/Bottom × Left/Center/Right)
   - Custom coordinates
-  - **NEW: Text search-based positioning** - automatically find and place signatures
-  - Page-level coordinates
+  - **NEW: Text search-based positioning**
+    - Single occurrence: Find text and place one signature
+    - **Multi-occurrence: Find text and place signatures at ALL occurrences automatically**
+  - Page-level coordinates for multiple signatures across pages
 - **Document Processing**:
   - Page-level signing control (All, Even, Odd, First, Last, or specify pages)
   - PDF, Hash, and eMandate XML signing
@@ -235,6 +238,66 @@ if (result.Found)
     Console.WriteLine($"Signature at: {result.CoordinateString}");
 }
 ```
+
+### 4. Multi-Occurrence Text Search (NEW!)
+
+**Place signatures at ALL occurrences of text automatically!**
+
+Perfect for documents with repeated signature fields like "Sign Here:" on multiple pages.
+
+```csharp
+// Find ALL occurrences of "Sign Here:" and place signatures
+PdfTextSearchResult searchResult;
+var input = new eSignInputBuilder()
+    .SetDocBase64(pdfBase64)
+    .SetDocInfo("Multi_Page_Contract")
+    .SearchAndPlaceSignatureAtAllOccurrences("Sign Here:",
+        SignaturePlacement.Below, out searchResult)
+    .SetSignedBy("John Doe")
+    .Build();
+
+if (searchResult.Found)
+{
+    Console.WriteLine($"Found {searchResult.TotalMatches} occurrences");
+    Console.WriteLine($"Placed {searchResult.AllMatches.Count} signatures");
+
+    // Details of each signature placement
+    foreach (var match in searchResult.AllMatches)
+    {
+        Console.WriteLine($"Page {match.PageNumber}: {match.CoordinateString}");
+    }
+}
+```
+
+**Output Example:**
+```
+Found 3 occurrences
+Placed 3 signatures
+Page 1: 83,535,233,595
+Page 1: 138,380,288,440
+Page 2: 392,571,542,631
+```
+
+**Comparison:**
+
+| Method | Signatures Placed | Use Case |
+|--------|------------------|----------|
+| `SearchAndPlaceSignature()` | 1 (first match) | Single signature location |
+| `SearchAndPlaceSignatureAtAllOccurrences()` | All matches | Multiple signature fields |
+
+---
+
+## Complete Workflow Guide
+
+📚 **For detailed documentation on the complete eSign workflow including:**
+- Text search features (single & multi-occurrence)
+- GetGateWayParam usage
+- Form posting to eMudhra
+- Handling redirects and responses
+- eSign v2 vs v3 flows
+- API endpoints and URLs
+
+**See: [ESIGN_WORKFLOW.md](./ESIGN_WORKFLOW.md)**
 
 ---
 

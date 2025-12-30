@@ -597,6 +597,115 @@ namespace eSignASPLibrary
         }
 
         /// <summary>
+        /// Searches for text and places signatures at ALL occurrences across all pages.
+        /// Uses PAGE_LEVEL mode to place multiple signatures.
+        /// </summary>
+        /// <param name="searchConfig">Configuration for text search and signature placement.</param>
+        /// <param name="searchResult">Output parameter containing search results and any errors.</param>
+        /// <returns>This builder instance for method chaining.</returns>
+        /// <example>
+        /// <code>
+        /// var searchConfig = new PdfTextSearchSignature
+        /// {
+        ///     SearchText = "Sign here:",
+        ///     SignatureWidth = 150,
+        ///     SignatureHeight = 60,
+        ///     Placement = SignaturePlacement.Below
+        /// };
+        ///
+        /// var input = new eSignInputBuilder()
+        ///     .SetDocBase64(pdfBase64)
+        ///     .SetSignaturePositionByTextSearchAllOccurrences(searchConfig, out var result)
+        ///     .SetSignedBy("John Doe")
+        ///     .Build();
+        ///
+        /// if (result.Found)
+        /// {
+        ///     Console.WriteLine($"Placed {result.TotalMatches} signatures");
+        /// }
+        /// </code>
+        /// </example>
+        public eSignInputBuilder SetSignaturePositionByTextSearchAllOccurrences(PdfTextSearchSignature searchConfig, out PdfTextSearchResult searchResult)
+        {
+            // Initialize result
+            searchResult = new PdfTextSearchResult { Found = false };
+
+            if (string.IsNullOrWhiteSpace(_docBase64))
+            {
+                searchResult.ErrorMessage = "DocBase64 must be set before performing text search.";
+                return this;
+            }
+
+            if (searchConfig == null)
+            {
+                searchResult.ErrorMessage = "Search configuration cannot be null.";
+                return this;
+            }
+
+            // Perform the search
+            searchResult = PdfContentSearchUtility.SearchAndGetSignatureCoordinates(_docBase64, searchConfig);
+
+            if (!searchResult.Found || searchResult.AllMatches == null || searchResult.AllMatches.Count == 0)
+            {
+                // Search failed - error already set in searchResult.ErrorMessage
+                return this;
+            }
+
+            // Build PageLevelCoordinates string: "page,x1,y1,x2,y2;page,x1,y1,x2,y2;..."
+            var pageLevelCoords = string.Join(";", searchResult.AllMatches.ConvertAll(m => m.PageLevelCoordinateString));
+
+            // Set page-level coordinates
+            _pageLevelCoordinates = pageLevelCoords;
+            _pageToBeSigned = eSign.PageToBeSigned.PAGE_LEVEL;
+            _customCoordinates = null; // Clear custom coordinates
+            _pageNumbers = null; // Clear page numbers
+
+            return this;
+        }
+
+        /// <summary>
+        /// Convenience method to search for text and place signatures at all occurrences with default settings.
+        /// </summary>
+        /// <param name="searchText">The text to search for in the PDF.</param>
+        /// <param name="placement">Placement strategy relative to found text (default: RightOf).</param>
+        /// <param name="searchResult">Output parameter containing search results and any errors.</param>
+        /// <returns>This builder instance for method chaining.</returns>
+        /// <example>
+        /// <code>
+        /// var input = new eSignInputBuilder()
+        ///     .SetDocBase64(pdfBase64)
+        ///     .SearchAndPlaceSignatureAtAllOccurrences("Inspector's Signature", SignaturePlacement.Below, out var result)
+        ///     .SetSignedBy("Inspector")
+        ///     .Build();
+        ///
+        /// Console.WriteLine($"Placed signatures at {result.TotalMatches} locations");
+        /// </code>
+        /// </example>
+        public eSignInputBuilder SearchAndPlaceSignatureAtAllOccurrences(string searchText, SignaturePlacement placement, out PdfTextSearchResult searchResult)
+        {
+            var searchConfig = new PdfTextSearchSignature
+            {
+                SearchText = searchText,
+                SignatureWidth = 150,
+                SignatureHeight = 60,
+                Placement = placement
+            };
+
+            return SetSignaturePositionByTextSearchAllOccurrences(searchConfig, out searchResult);
+        }
+
+        /// <summary>
+        /// Convenience method to search for text and place signatures at all occurrences with default placement (RightOf).
+        /// </summary>
+        /// <param name="searchText">The text to search for in the PDF.</param>
+        /// <param name="searchResult">Output parameter containing search results and any errors.</param>
+        /// <returns>This builder instance for method chaining.</returns>
+        public eSignInputBuilder SearchAndPlaceSignatureAtAllOccurrences(string searchText, out PdfTextSearchResult searchResult)
+        {
+            return SearchAndPlaceSignatureAtAllOccurrences(searchText, SignaturePlacement.RightOf, out searchResult);
+        }
+
+        /// <summary>
         /// Advanced signature placement by searching for text with custom dimensions.
         /// </summary>
         /// <param name="searchText">The text to search for in the PDF.</param>
@@ -699,15 +808,16 @@ namespace eSignASPLibrary
                 return new eSignInput(_docBase64, _docInfo, _pdfUrl, _location, _reason, _signedBy,
                     _coSign, _pageLevelCoordinates, _appearanceText, _requiredGreenTick, _requiredValidMessage, _fontSize);
             }
+            else if (!string.IsNullOrWhiteSpace(_customCoordinates))
+            {
+                // For text search: pass both PageNumbers and CustomCoordinates
+                return new eSignInput(_docBase64, _docInfo, _pdfUrl, _location, _reason, _signedBy,
+                    _coSign, _pageNumbers, _customCoordinates, _appearanceText, _requiredGreenTick, _requiredValidMessage, _fontSize);
+            }
             else if (_pageToBeSigned == eSign.PageToBeSigned.SPECIFY && !string.IsNullOrWhiteSpace(_pageNumbers))
             {
                 return new eSignInput(_docBase64, _docInfo, _pdfUrl, _location, _reason, _signedBy,
                     _coSign, _coordinates, _pageNumbers, _appearanceText, _requiredGreenTick, _requiredValidMessage, _fontSize);
-            }
-            else if (!string.IsNullOrWhiteSpace(_customCoordinates))
-            {
-                return new eSignInput(_docBase64, _docInfo, _pdfUrl, _location, _reason, _signedBy,
-                    _coSign, _pageToBeSigned, _customCoordinates, _appearanceText, _requiredGreenTick, _requiredValidMessage, _fontSize);
             }
             else
             {

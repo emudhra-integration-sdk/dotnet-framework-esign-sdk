@@ -46,6 +46,12 @@
         public eSignInput(string DocBase64, string docInfo, string docURL, string Location, string Reason, string SignedBy, bool CoSign, eSign.Coordinates Coordinates, string PageNumbers, string appearanceText, bool requiredGreenTick = true, bool requiredValidMessage = true, int fontsize = 8)
         : this(DocBase64, docInfo, docURL, Location, Reason, SignedBy, CoSign, eSign.PageToBeSigned.SPECIFY, Coordinates, PageNumbers, "", "", appearanceText, eSign.DocType.Pdf, requiredGreenTick, requiredValidMessage, fontsize) { }
 
+        /// <summary>
+        /// Constructor for text search based signature placement with custom coordinates and specific page numbers.
+        /// </summary>
+        public eSignInput(string DocBase64, string docInfo, string docURL, string Location, string Reason, string SignedBy, bool CoSign, string PageNumbers, string CustomCoordinates, string appearanceText, bool requiredGreenTick = true, bool requiredValidMessage = true, int fontsize = 8)
+        : this(DocBase64, docInfo, docURL, Location, Reason, SignedBy, CoSign, eSign.PageToBeSigned.SPECIFY, eSign.Coordinates.Top_Left, PageNumbers, "", CustomCoordinates, appearanceText, eSign.DocType.Pdf, requiredGreenTick, requiredValidMessage, fontsize) { }
+
         public eSignInput(string DocBase64, string docInfo, string docURL, string Location, string Reason, string SignedBy, bool CoSign, string PageLevelCoordinates, string appearanceText, bool requiredGreenTick = true, bool requiredValidMessage = true, int fontsize = 8)
         : this(DocBase64, docInfo, docURL, Location, Reason, SignedBy, CoSign, eSign.PageToBeSigned.PAGE_LEVEL, eSign.Coordinates.Top_Left, "", PageLevelCoordinates, "", appearanceText, eSign.DocType.Pdf, requiredGreenTick, requiredValidMessage, fontsize) { }
 
