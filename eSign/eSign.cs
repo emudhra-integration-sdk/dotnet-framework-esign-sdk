@@ -1258,8 +1258,10 @@ namespace eSignASPLibrary
                         catch { }
 
                         // Build text content stream for this field
-                        const float textXBase = 8f;
-                        float availableTextW = rect.Width - textXBase - 4f;
+                        const float textXBase  = 8f;
+                        const float bottomPad  = 4f;
+                        const float minFontSz  = 4.5f;
+                        float availableTextW   = rect.Width - textXBase - 4f;
 
                         var rawLines = new System.Collections.Generic.List<string>();
                         rawLines.Add("Digitally Signed by");
@@ -1269,18 +1271,37 @@ namespace eSignASPLibrary
                             rawLines.Add("Reason: " + reason);
                         rawLines.Add("Date : " + signDate);
 
-                        var lines = new System.Collections.Generic.List<string>();
-                        foreach (string raw in rawLines)
-                            lines.AddRange(WrapLine(raw, availableTextW, 8f));
+                        // Auto-fit: reduce font size until all wrapped lines fit vertically
+                        float fontSize = 8f;
+                        System.Collections.Generic.List<string> lines = null;
+                        float leading = fontSize + 2f, startY = rect.Height - leading;
+                        while (fontSize >= minFontSz)
+                        {
+                            leading = fontSize + 2f;
+                            startY  = rect.Height - leading;
+                            int maxLines = Math.Max(1, (int)((startY - bottomPad) / leading) + 1);
+                            var candidate = new System.Collections.Generic.List<string>();
+                            foreach (string raw in rawLines)
+                                candidate.AddRange(WrapLine(raw, availableTextW, fontSize));
+                            if (candidate.Count <= maxLines) { lines = candidate; break; }
+                            fontSize -= 0.5f;
+                        }
+                        if (lines == null) // at min size, render whatever fits
+                        {
+                            leading = fontSize + 2f;
+                            startY  = rect.Height - leading;
+                            lines   = new System.Collections.Generic.List<string>();
+                            foreach (string raw in rawLines)
+                                lines.AddRange(WrapLine(raw, availableTextW, fontSize));
+                        }
 
-                        float startY = rect.Height - 10f;
                         var cs = new StringBuilder();
                         cs.Append("BT\n");
-                        cs.Append("/F1 8 Tf\n");
+                        cs.Append("/F1 " + fontSize.ToString("F1", System.Globalization.CultureInfo.InvariantCulture) + " Tf\n");
                         cs.Append("/DeviceRGB cs\n0 0 0 sc\n");
                         cs.Append(textXBase.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)
                             + " " + startY.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) + " Td\n");
-                        cs.Append("8 TL\n");
+                        cs.Append(leading.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) + " TL\n");
                         for (int li = 0; li < lines.Count; li++)
                         {
                             string escaped = lines[li]
@@ -1458,8 +1479,10 @@ namespace eSignASPLibrary
                             cs.Append("Q\n");
                         }
 
-                        float textX  = imgRef != null ? (4f + imgDispW + 6f) : 8f;
-                        float availableTextW = rect.Width - textX - 4f;
+                        float textX          = imgRef != null ? (4f + imgDispW + 6f) : 8f;
+                        const float bottomPadL = 4f;
+                        const float minFontSzL = 4.5f;
+                        float availableTextW   = rect.Width - textX - 4f;
 
                         var rawLines = new System.Collections.Generic.List<string>();
                         rawLines.Add("Digitally Signed by");
@@ -1469,18 +1492,36 @@ namespace eSignASPLibrary
                             rawLines.Add("Reason: " + reason);
                         rawLines.Add("Date : " + signDate);
 
-                        var lines = new System.Collections.Generic.List<string>();
-                        foreach (string raw in rawLines)
-                            lines.AddRange(WrapLine(raw, availableTextW, 8f));
-
-                        float startY = rect.Height - 10f;
+                        // Auto-fit: reduce font size until all wrapped lines fit vertically
+                        float fontSize = 8f;
+                        System.Collections.Generic.List<string> lines = null;
+                        float leading = fontSize + 2f, startY = rect.Height - leading;
+                        while (fontSize >= minFontSzL)
+                        {
+                            leading = fontSize + 2f;
+                            startY  = rect.Height - leading;
+                            int maxLines = Math.Max(1, (int)((startY - bottomPadL) / leading) + 1);
+                            var candidate = new System.Collections.Generic.List<string>();
+                            foreach (string raw in rawLines)
+                                candidate.AddRange(WrapLine(raw, availableTextW, fontSize));
+                            if (candidate.Count <= maxLines) { lines = candidate; break; }
+                            fontSize -= 0.5f;
+                        }
+                        if (lines == null)
+                        {
+                            leading = fontSize + 2f;
+                            startY  = rect.Height - leading;
+                            lines   = new System.Collections.Generic.List<string>();
+                            foreach (string raw in rawLines)
+                                lines.AddRange(WrapLine(raw, availableTextW, fontSize));
+                        }
 
                         cs.Append("BT\n");
-                        cs.Append("/F1 8 Tf\n");
+                        cs.Append("/F1 " + fontSize.ToString("F1", System.Globalization.CultureInfo.InvariantCulture) + " Tf\n");
                         cs.Append("/DeviceRGB cs\n0 0 0 sc\n");
                         cs.Append(textX.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)
                             + " " + startY.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) + " Td\n");
-                        cs.Append("8 TL\n");
+                        cs.Append(leading.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) + " TL\n");
                         for (int li = 0; li < lines.Count; li++)
                         {
                             string escaped = lines[li]
