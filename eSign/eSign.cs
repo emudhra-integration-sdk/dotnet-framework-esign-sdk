@@ -78,6 +78,12 @@ namespace eSignASPLibrary
             FACE = 4
         }
 
+        public enum AppearanceType
+        {
+            Default = 0,
+            Aadhaar = 1
+        }
+
         private List<eSignReturnDocument> returnDocuments;
         //public eSign(string LicenceFilePath, string PFXFilePath, string PFXPassword, string PFXAlias, int SignatureContents = 21000) : this(LicenceFilePath, PFXFilePath, PFXPassword, PFXAlias, false, string.Empty, 0, string.Empty, string.Empty, SignatureContents) { }
         public eSign(string PFXFilePath, string PFXPassword, string PFXAlias, bool IsProxyRequired, string ProxyIP, int ProxyPort, string ProxyUserName, string ProxyPassword, string ASPID, string eSignURL, string eSignURLV2, string eSignCheckStatusURL, int SignatureContents = 21000)
@@ -185,11 +191,11 @@ namespace eSignASPLibrary
                                 layer2text.Append(string.Format("Location: {0} \n", eSignInput.Location));
                                 signatureAppearance.Location = eSignInput.Location;
                             }
-                            signatureAppearance.Layer2Text = layer2text.ToString();
-                            if (!string.IsNullOrWhiteSpace(eSignInput.appearanceText))
-                            {
-                                signatureAppearance.Layer2Text = eSignInput.appearanceText;
-                            }
+                            // For Aadhaar appearance type: leave blank; PatchSignatureAppearance fills it in Phase 2 from the cert.
+                            // For Default: bake the SignedBy/date/reason/location text into the appearance at Phase 1.
+                            signatureAppearance.Layer2Text = eSignInput.AppearanceType == AppearanceType.Aadhaar
+                                ? string.Empty
+                                : layer2text.ToString();
 
                             if (!eSignInput.RequiredValidMessage)
                             {
@@ -309,7 +315,7 @@ namespace eSignASPLibrary
                             }
                            
                             Rectangle rect = null;
-                            Rectangle[] rList;
+                            Rectangle[] rList = null;
                             if (eSignInput.PageTobeSigned == PageToBeSigned.PAGE_LEVEL)
                             {
                                 string[] Cordinatespagelevel, Pagelevel;
@@ -384,6 +390,7 @@ namespace eSignASPLibrary
                                 DocumentURL = eSignInput.PdfUrl,
                                 DocumentInfo = eSignInput.DocInfo,
                                 PreSignedDocument = preSignedPdf,
+                                AppearanceType = eSignInput.AppearanceType,
                             });
                         }
                         else if (eSignInput.docType.Equals(DocType.Hash))
@@ -769,6 +776,8 @@ namespace eSignASPLibrary
                             {
                                 case DocType.Pdf:
                                     byte[] pdf = signClose(SignedHash, PreSignedDoc.PreSignedDocument);
+                                    if (PreSignedDoc.AppearanceType == AppearanceType.Aadhaar)
+                                        pdf = PatchSignatureAppearance(pdf, UserCretificateNode);
                                     PreSignedDoc.SignedDocument = Convert.ToBase64String(pdf);
                                     break;
                                 case DocType.Hash:
@@ -889,6 +898,11 @@ namespace eSignASPLibrary
                         return oreturn;
                     }
 
+                    string UserCretificateNode = string.Empty;
+                    var userCertXmlNode = SignRespElement.SelectSingleNode("//UserX509Certificate");
+                    if (userCertXmlNode != null)
+                        UserCretificateNode = userCertXmlNode.InnerText;
+
                     XmlNodeList DocumentSignatureNodes = SignRespElement.SelectNodes("//DocSignature");
                     if (DocumentSignatureNodes.Count <= 0)
                     {
@@ -943,6 +957,8 @@ namespace eSignASPLibrary
                             else
                             {
                                 byte[] pdf = signClose(SignedHash, PreSignedDoc.PreSignedDocument);
+                                if (PreSignedDoc.AppearanceType == AppearanceType.Aadhaar)
+                                    pdf = PatchSignatureAppearance(pdf, UserCretificateNode);
                                 PreSignedDoc.SignedDocument = Convert.ToBase64String(pdf);
                             }
                             PreSignedDoc.Status = eSign.status.Success;
@@ -1050,6 +1066,332 @@ namespace eSignASPLibrary
                 return oreturn;
             }
         }
+
+        private static void DrawPreSignBackground(
+            PdfTemplate tpl, float w, float h, string signDate, string reason, string location)
+        {
+            BaseFont font     = BaseFont.CreateFont(BaseFont.HELVETICA,      BaseFont.CP1252, BaseFont.NOT_EMBEDDED);
+            BaseFont boldFont = BaseFont.CreateFont(BaseFont.HELVETICA_BOLD, BaseFont.CP1252, BaseFont.NOT_EMBEDDED);
+
+            tpl.SetColorFill(new BaseColor(240, 245, 255));
+            tpl.Rectangle(0, 0, w, h);
+            tpl.Fill();
+
+            tpl.SetColorStroke(new BaseColor(30, 80, 160));
+            tpl.SetLineWidth(1f);
+            tpl.Rectangle(1, 1, w - 2, h - 2);
+            tpl.Stroke();
+
+            float x = 6f;
+            float y = h - 14f;
+
+            tpl.SetColorFill(BaseColor.BLACK);
+            tpl.BeginText();
+            tpl.SetFontAndSize(boldFont, 8f);
+            tpl.SetTextMatrix(x, y);
+            tpl.ShowText("DIGITALLY SIGNED BY");
+            tpl.EndText();
+
+            // name row is reserved for the TextField overlay — skip 13pt (title) + 12pt (name)
+            y -= 25f;
+
+            tpl.BeginText();
+            tpl.SetFontAndSize(font, 7f);
+            tpl.SetColorFill(new BaseColor(64, 64, 64));
+            tpl.SetTextMatrix(x, y);
+            tpl.ShowText("Date: " + signDate);
+            tpl.EndText();
+            y -= 11f;
+
+            if (!string.IsNullOrWhiteSpace(reason))
+            {
+                tpl.BeginText();
+                tpl.SetFontAndSize(font, 7f);
+                tpl.SetTextMatrix(x, y);
+                tpl.ShowText("Reason: " + reason);
+                tpl.EndText();
+                y -= 10f;
+            }
+
+            if (!string.IsNullOrWhiteSpace(location))
+            {
+                tpl.BeginText();
+                tpl.SetFontAndSize(font, 7f);
+                tpl.SetTextMatrix(x, y);
+                tpl.ShowText("Location: " + location);
+                tpl.EndText();
+            }
+        }
+
+        private static byte[] FillSignerNameField(byte[] signedPdfBytes, string userX509CertBase64, int docId)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(userX509CertBase64))
+                    return signedPdfBytes;
+
+                var subjectDN = new emCastle.X509.X509CertificateParser()
+                    .ReadCertificate(Convert.FromBase64String(userX509CertBase64)).SubjectDN;
+                var cnList = subjectDN.GetValueList(new emCastle.Asn1.DerObjectIdentifier("2.5.4.3"));
+                string certName = (cnList != null && cnList.Count > 0) ? cnList[0].ToString() : "Unknown";
+
+                using (MemoryStream inputMs = new MemoryStream(signedPdfBytes))
+                using (MemoryStream outputMs = new MemoryStream())
+                {
+                    PdfReader  reader  = new PdfReader(inputMs);
+                    PdfStamper stamper = new PdfStamper(reader, outputMs, '\0', true);
+
+                    AcroFields fields = stamper.AcroFields;
+                    fields.GenerateAppearances = true;
+
+                    string prefix   = "SN_" + docId + "_";
+                    bool   anyFilled = false;
+                    foreach (string fn in new List<string>(fields.Fields.Keys))
+                    {
+                        if (fn.StartsWith(prefix))
+                        {
+                            fields.SetField(fn, certName);
+                            anyFilled = true;
+                        }
+                    }
+
+                    stamper.Close();
+                    reader.Close();
+                    return anyFilled ? outputMs.ToArray() : signedPdfBytes;
+                }
+            }
+            catch
+            {
+                return signedPdfBytes;
+            }
+        }
+
+        private static byte[] PatchSignatureAppearance(byte[] signedPdfBytes, string userX509CertBase64)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(userX509CertBase64))
+                    return signedPdfBytes;
+
+                var subjectDN = new emCastle.X509.X509CertificateParser()
+                    .ReadCertificate(Convert.FromBase64String(userX509CertBase64)).SubjectDN;
+
+                var cnList = subjectDN.GetValueList(new emCastle.Asn1.DerObjectIdentifier("2.5.4.3"));
+                string certName = (cnList != null && cnList.Count > 0)
+                    ? cnList[0].ToString() : "Unknown";
+
+                // OID 2.5.4.12 = Title field; eMudhra stores masked Aadhaar here
+                string aadhaarLast4 = "XXXX";
+                try
+                {
+                    var aaList = subjectDN.GetValueList(new emCastle.Asn1.DerObjectIdentifier("2.5.4.12"));
+                    if (aaList != null && aaList.Count > 0)
+                    {
+                        string val = aaList[0].ToString();
+                        if (val.Length >= 4)
+                            aadhaarLast4 = val.Substring(val.Length - 4);
+                    }
+                }
+                catch { }
+
+                using (MemoryStream inputMs = new MemoryStream(signedPdfBytes))
+                using (MemoryStream outputMs = new MemoryStream())
+                {
+                    PdfReader reader   = new PdfReader(inputMs);
+                    PdfStamper stamper = new PdfStamper(reader, outputMs, '\0', true); // append mode
+
+                    AcroFields readerFields = reader.AcroFields;
+                    IList<string> sigNames  = readerFields.GetSignatureNames();
+                    if (sigNames.Count == 0)
+                    {
+                        stamper.Close();
+                        reader.Close();
+                        return signedPdfBytes;
+                    }
+
+                    // --- Build font object once; shared across all signature fields ---
+                    PdfDictionary fontObj = new PdfDictionary();
+                    fontObj.Put(PdfName.TYPE, PdfName.FONT);
+                    fontObj.Put(PdfName.SUBTYPE, new PdfName("Type1"));
+                    fontObj.Put(PdfName.BASEFONT, new PdfName("Times-Italic"));
+                    fontObj.Put(new PdfName("Encoding"), new PdfName("WinAnsiEncoding"));
+                    PdfIndirectObject fontRef = stamper.Writer.AddToBody(fontObj);
+
+                    PdfDictionary fontResources = new PdfDictionary();
+                    fontResources.Put(new PdfName("F1"), fontRef.IndirectReference);
+                    PdfDictionary resDict = new PdfDictionary();
+                    resDict.Put(PdfName.FONT, fontResources);
+
+                    // Patch appearance for every signature field in the document
+                    foreach (string sigFieldName in sigNames)
+                    {
+                        AcroFields.Item item = readerFields.GetFieldItem(sigFieldName);
+                        if (item == null) continue;
+                        PdfDictionary widget = item.GetWidget(0);
+                        if (widget == null) continue;
+                        Rectangle rect = PdfReader.GetNormalizedRectangle(
+                            widget.GetAsArray(PdfName.RECT));
+
+                        // Read signing date, reason, location from this field's sig dict
+                        string signDate = DateTime.Now.ToString("dd-MMM-yyyy HH:mm:ss");
+                        string reason   = string.Empty, location = string.Empty;
+                        try
+                        {
+                            PdfDictionary sigDict =
+                                PdfReader.GetPdfObject(widget.Get(PdfName.V)) as PdfDictionary;
+                            if (sigDict != null)
+                            {
+                                PdfString dateStr = sigDict.GetAsString(PdfName.M);
+                                if (dateStr != null)
+                                    try { signDate = PdfDate.Decode(dateStr.ToString())
+                                            .ToString("dd-MMM-yyyy HH:mm:ss"); } catch { }
+                                PdfString rs = sigDict.GetAsString(PdfName.REASON);
+                                PdfString ls = sigDict.GetAsString(PdfName.LOCATION);
+                                if (rs != null) reason   = rs.ToUnicodeString();
+                                if (ls != null) location = ls.ToUnicodeString();
+                            }
+                        }
+                        catch { }
+
+                        // Build text content stream for this field
+                        var lines = new System.Collections.Generic.List<string>();
+                        lines.Add("Digitally Signed by");
+                        lines.Add("Name : " + certName);
+                        lines.Add("Aadhaar No : **** **** " + aadhaarLast4);
+                        if (!string.IsNullOrWhiteSpace(reason))
+                            lines.Add("Reason: " + reason);
+                        lines.Add("Date : " + signDate);
+
+                        float startY = rect.Height - 10f;
+                        var cs = new StringBuilder();
+                        cs.Append("BT\n");
+                        cs.Append("/F1 8 Tf\n");
+                        cs.Append("/DeviceRGB cs\n0 0 0 sc\n");
+                        cs.Append("8 " + startY.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) + " Td\n");
+                        cs.Append("8 TL\n");
+                        for (int li = 0; li < lines.Count; li++)
+                        {
+                            string escaped = lines[li]
+                                .Replace("\\", "\\\\")
+                                .Replace("(", "\\(")
+                                .Replace(")", "\\)");
+                            cs.Append(li < lines.Count - 1
+                                ? "(" + escaped + ") Tj T*\n"
+                                : "(" + escaped + ") Tj\n");
+                        }
+                        cs.Append("ET");
+
+                        byte[] streamBytes = System.Text.Encoding.GetEncoding(1252).GetBytes(cs.ToString());
+
+                        // Form XObject with BBox, Resources, content stream
+                        PdfStream apStream = new PdfStream(streamBytes);
+                        apStream.Put(PdfName.TYPE, PdfName.XOBJECT);
+                        apStream.Put(PdfName.SUBTYPE, PdfName.FORM);
+                        apStream.Put(PdfName.BBOX,
+                            new PdfArray(new[] { 0f, 0f, rect.Width, rect.Height }));
+                        apStream.Put(PdfName.RESOURCES, resDict);
+                        PdfIndirectObject apRef = stamper.Writer.AddToBody(apStream);
+
+                        // Update widget's /AP /N → new Form XObject
+                        PdfDictionary newAp = new PdfDictionary();
+                        newAp.Put(PdfName.N, apRef.IndirectReference);
+                        widget.Put(PdfName.AP, newAp);
+
+                        // Mark widget modified → written into incremental revision
+                        stamper.MarkUsed(widget);
+                    }
+
+                    stamper.Close();
+                    reader.Close();
+
+                    return outputMs.ToArray();
+                }
+            }
+            catch
+            {
+                return signedPdfBytes;
+            }
+        }
+
+        private static void DrawSignatureAppearance(
+            PdfAppearance app, float w, float h,
+            string certName, string aadhaarLast4,
+            string signDate, string reason, string location)
+        {
+            BaseFont font     = BaseFont.CreateFont(BaseFont.HELVETICA,
+                                    BaseFont.CP1252, BaseFont.NOT_EMBEDDED);
+            BaseFont boldFont = BaseFont.CreateFont(BaseFont.HELVETICA_BOLD,
+                                    BaseFont.CP1252, BaseFont.NOT_EMBEDDED);
+
+            // Background
+            app.SetColorFill(new BaseColor(240, 245, 255));
+            app.Rectangle(0, 0, w, h);
+            app.Fill();
+
+            // Border
+            app.SetColorStroke(new BaseColor(30, 80, 160));
+            app.SetLineWidth(1f);
+            app.Rectangle(1, 1, w - 2, h - 2);
+            app.Stroke();
+
+            float x = 6f;
+            float y = h - 14f;
+
+            // Title
+            app.SetColorFill(BaseColor.BLACK);
+            app.BeginText();
+            app.SetFontAndSize(boldFont, 8f);
+            app.SetTextMatrix(x, y);
+            app.ShowText("DIGITALLY SIGNED BY");
+            app.EndText();
+            y -= 13f;
+
+            // Signer name
+            app.BeginText();
+            app.SetFontAndSize(boldFont, 10f);
+            app.SetColorFill(new BaseColor(10, 60, 140));
+            app.SetTextMatrix(x, y);
+            app.ShowText(certName);
+            app.EndText();
+            y -= 12f;
+
+            // Aadhaar last 4
+            app.BeginText();
+            app.SetFontAndSize(font, 7.5f);
+            app.SetColorFill(new BaseColor(64, 64, 64));
+            app.SetTextMatrix(x, y);
+            app.ShowText("Aadhaar: XXXX-XXXX-" + aadhaarLast4);
+            app.EndText();
+            y -= 11f;
+
+            // Date
+            app.BeginText();
+            app.SetFontAndSize(font, 7f);
+            app.SetTextMatrix(x, y);
+            app.ShowText("Date: " + signDate);
+            app.EndText();
+            y -= 10f;
+
+            if (!string.IsNullOrWhiteSpace(reason))
+            {
+                app.BeginText();
+                app.SetFontAndSize(font, 7f);
+                app.SetTextMatrix(x, y);
+                app.ShowText("Reason: " + reason);
+                app.EndText();
+                y -= 10f;
+            }
+
+            if (!string.IsNullOrWhiteSpace(location))
+            {
+                app.BeginText();
+                app.SetFontAndSize(font, 7f);
+                app.SetTextMatrix(x, y);
+                app.ShowText("Location: " + location);
+                app.EndText();
+            }
+        }
+
         private static byte[] signClose(string pkcs7, string preSignedValue)
         {
             try

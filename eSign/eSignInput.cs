@@ -19,6 +19,7 @@
         public string PdfUrl { get; }
         public string DocInfo { get; }
         public string appearanceText { get; set; }
+        public eSign.AppearanceType AppearanceType { get; set; }
         public eSignInput(string xmlToSign, string docInfo, string docURL)
             : this(xmlToSign, docInfo, docURL, "", "", "", true, eSign.PageToBeSigned.PAGE_LEVEL, eSign.Coordinates.Bottom_Left, "", "", "", "", eSign.DocType.eMandate, true, true, 8) { }
         public eSignInput(string DocHash, string docInfo, string docURL, eSign.DocType docType)
@@ -56,7 +57,8 @@
         : this(DocBase64, docInfo, docURL, Location, Reason, SignedBy, CoSign, eSign.PageToBeSigned.PAGE_LEVEL, eSign.Coordinates.Top_Left, "", PageLevelCoordinates, "", appearanceText, eSign.DocType.Pdf, requiredGreenTick, requiredValidMessage, fontsize) { }
 
         private eSignInput(string DocBase64, string DocInfo, string PdfUrl, string Location, string Reason, string SignedBy, bool CoSign, eSign.PageToBeSigned PageTobeSigned, eSign.Coordinates Coordinates,
-            string PageNumbers, string PageLevelCoordinates, string customCoordinates, string appearanceText, eSign.DocType docType, bool requiredGreenTick, bool requiredValidMessage, int fontsize)
+            string PageNumbers, string PageLevelCoordinates, string customCoordinates, string appearanceText, eSign.DocType docType, bool requiredGreenTick, bool requiredValidMessage, int fontsize,
+            eSign.AppearanceType appearanceType = eSign.AppearanceType.Default)
         {
             this.CoSign = CoSign;
             this.Coordinates = Coordinates;
@@ -75,6 +77,7 @@
             this.RequiredGreenTick = requiredGreenTick;
             this.RequiredValidMessage = requiredValidMessage;
             this.FontSize = fontsize;
+            this.AppearanceType = appearanceType;
         }
     }
 }

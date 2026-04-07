@@ -41,6 +41,7 @@ namespace eSignASPLibrary
         private string _pdfUrl;
         private string _docInfo;
         private string _appearanceText;
+        private eSign.AppearanceType _appearanceType = eSign.AppearanceType.Default;
 
         #endregion
 
@@ -92,6 +93,19 @@ namespace eSignASPLibrary
         public eSignInputBuilder SetDocType(eSign.DocType docType)
         {
             _docType = docType;
+            return this;
+        }
+
+        /// <summary>
+        /// Sets the appearance type for the signature.
+        /// Use <see cref="eSign.AppearanceType.Aadhaar"/> to patch the visual appearance
+        /// with the signer's name and Aadhaar details extracted from the eMudhra certificate.
+        /// </summary>
+        /// <param name="appearanceType">The appearance type to use.</param>
+        /// <returns>This builder instance for method chaining.</returns>
+        public eSignInputBuilder SetAppearanceType(eSign.AppearanceType appearanceType)
+        {
+            _appearanceType = appearanceType;
             return this;
         }
 
@@ -794,36 +808,41 @@ namespace eSignASPLibrary
         {
             Validate();
 
+            eSignInput input;
+
             // Determine which constructor to use based on configuration
             if (_docType == eSign.DocType.Hash)
             {
-                return new eSignInput(_docBase64, _docInfo, _pdfUrl, _docType);
+                input = new eSignInput(_docBase64, _docInfo, _pdfUrl, _docType);
             }
             else if (_docType == eSign.DocType.eMandate)
             {
-                return new eSignInput(_docBase64, _docInfo, _pdfUrl);
+                input = new eSignInput(_docBase64, _docInfo, _pdfUrl);
             }
             else if (_pageToBeSigned == eSign.PageToBeSigned.PAGE_LEVEL && !string.IsNullOrWhiteSpace(_pageLevelCoordinates))
             {
-                return new eSignInput(_docBase64, _docInfo, _pdfUrl, _location, _reason, _signedBy,
+                input = new eSignInput(_docBase64, _docInfo, _pdfUrl, _location, _reason, _signedBy,
                     _coSign, _pageLevelCoordinates, _appearanceText, _requiredGreenTick, _requiredValidMessage, _fontSize);
             }
             else if (!string.IsNullOrWhiteSpace(_customCoordinates))
             {
                 // For text search: pass both PageNumbers and CustomCoordinates
-                return new eSignInput(_docBase64, _docInfo, _pdfUrl, _location, _reason, _signedBy,
+                input = new eSignInput(_docBase64, _docInfo, _pdfUrl, _location, _reason, _signedBy,
                     _coSign, _pageNumbers, _customCoordinates, _appearanceText, _requiredGreenTick, _requiredValidMessage, _fontSize);
             }
             else if (_pageToBeSigned == eSign.PageToBeSigned.SPECIFY && !string.IsNullOrWhiteSpace(_pageNumbers))
             {
-                return new eSignInput(_docBase64, _docInfo, _pdfUrl, _location, _reason, _signedBy,
+                input = new eSignInput(_docBase64, _docInfo, _pdfUrl, _location, _reason, _signedBy,
                     _coSign, _coordinates, _pageNumbers, _appearanceText, _requiredGreenTick, _requiredValidMessage, _fontSize);
             }
             else
             {
-                return new eSignInput(_docBase64, _docInfo, _pdfUrl, _location, _reason, _signedBy,
+                input = new eSignInput(_docBase64, _docInfo, _pdfUrl, _location, _reason, _signedBy,
                     _coSign, _pageToBeSigned, _coordinates, _appearanceText, _requiredGreenTick, _requiredValidMessage, _fontSize);
             }
+
+            input.AppearanceType = _appearanceType;
+            return input;
         }
 
         /// <summary>
@@ -849,6 +868,7 @@ namespace eSignASPLibrary
             _pdfUrl = null;
             _docInfo = null;
             _appearanceText = null;
+            _appearanceType = eSign.AppearanceType.Default;
 
             return this;
         }

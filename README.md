@@ -494,6 +494,16 @@ Pdf, Hash, eMandate
 OTP, FP, IRIS, FACE
 ```
 
+#### `eSign.AppearanceType` (NEW!)
+```csharp
+Default, Aadhaar
+```
+
+| Value | Behaviour |
+|---|---|
+| `Default` | Bakes `SignedBy` name, date, reason, and location into the visual box at Phase 1 (pre-sign). No post-sign patching. |
+| `Aadhaar` | Leaves the visual box blank at Phase 1. After signing, patches the appearance with the signer's **legal name** and **masked Aadhaar number** (last 4 digits) extracted directly from the eMudhra-issued X.509 certificate. |
+
 #### `SignaturePlacement` (NEW!)
 ```csharp
 RightOf, LeftOf, Above, Below, AtPosition
@@ -556,6 +566,37 @@ var input = new eSignInputBuilder()
     .SetPdfUrl("https://example.com/mandate.xml")
     .Build();
 ```
+
+### Example 6: Aadhaar Appearance — Patch from Certificate
+
+When you want the signature box to display the signer's **real legal name** and **masked Aadhaar** (as issued by eMudhra), use `AppearanceType.Aadhaar`. The visual box is left blank at Phase 1 and is automatically patched from the certificate after signing.
+
+```csharp
+var input = new eSignInputBuilder()
+    .SetDocBase64(pdfBase64)
+    .SetDocInfo("Agreement_2024")
+    .SetReason("I agree to the terms")
+    .SetLocation("Chennai")
+    .SignLastPage()
+    .SetCoordinates(eSign.Coordinates.Bottom_Right)
+    .SetAppearanceType(eSign.AppearanceType.Aadhaar)  // patch from cert post-sign
+    .Build();
+
+// Phase 1
+var gatewayResult = eSignInstance.GetGateWayParam(
+    new List<eSignInput> { input }, signerID, txnID, responseURL, redirectURL, tempPath);
+
+// Phase 2 — after eMudhra callback
+var signedResult = eSignInstance.GetSigedDocument(responseXML, tempFilePath);
+// The signed PDF's appearance box will show:
+//   DIGITALLY SIGNED BY
+//   Name : <CN from cert>
+//   Aadhaar No : **** **** XXXX
+//   Reason: I agree to the terms
+//   Date : dd-MMM-yyyy HH:mm:ss
+```
+
+> **Note**: `SignedBy` is not used when `AppearanceType.Aadhaar` is set — the name always comes from the certificate CN, ensuring it matches the Aadhaar-verified identity.
 
 For more examples, see:
 - [USAGE_EXAMPLES.md](eSign/USAGE_EXAMPLES.md)
@@ -668,7 +709,12 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 
 ## Changelog
 
-### Version 2.0.0.17 (Latest)
+### Version 2.0.0.18 (Latest)
+- ✅ `AppearanceType.Aadhaar` — post-sign patch of visual signature box with cert name and masked Aadhaar
+- ✅ `SetAppearanceType()` on `eSignInputBuilder` for fluent configuration
+- ✅ `AppearanceType.Default` restores original `SignedBy`-based Phase 1 appearance
+
+### Version 2.0.0.17
 - ✅ Builder pattern for eSignInput creation
 - ✅ PDF text search with automatic signature placement
 - ✅ Multiple placement strategies (RightOf, LeftOf, Above, Below, AtPosition)

@@ -19,6 +19,7 @@ namespace eSignASPLibrary
         public string DocumentInfo { get; internal set; }
         public string PreSignedDocument { get; internal set; }
         public eSign.DocType DocType { get; internal set; }
+        public eSign.AppearanceType AppearanceType { get; internal set; }
         public string SignedHash { get; internal set; }
 
         public eSignReturnDocument() { }
@@ -29,7 +30,7 @@ namespace eSignASPLibrary
                 byte[] decodedBytes = Convert.FromBase64String(returnDocumentBase64);
                 string returnDocument = Encoding.UTF8.GetString(decodedBytes);
                 string[] returnDocumentValues = returnDocument.Split('|');
-                if (returnDocumentValues.Length != 6)
+                if (returnDocumentValues.Length < 6)
                 {
                     throw new ArgumentException("invalid return Document");
                 }
@@ -39,14 +40,15 @@ namespace eSignASPLibrary
                 DocumentInfo = returnDocumentValues[1];
                 DocumentURL = returnDocumentValues[2];
                 DocumentHash = returnDocumentValues[3];
-                //DocType = returnDocumentValues[5] == "Pdf" ? eSign.DocType.Pdf : eSign.DocType.Hash;
-                //eSign.DocType parsedDocType;
-                //if(Enum.TryParse(returnDocumentValues[5], out parsedDocType))
-                //{
-
-                //}
                 DocType = (eSign.DocType)Enum.Parse(typeof(eSign.DocType), returnDocumentValues[5], true);
                 PreSignedDocument = returnDocumentValues[4];
+                if (returnDocumentValues.Length >= 7)
+                {
+                    eSign.AppearanceType parsedAppearanceType;
+                    AppearanceType = Enum.TryParse(returnDocumentValues[6], true, out parsedAppearanceType)
+                        ? parsedAppearanceType
+                        : eSign.AppearanceType.Default;
+                }
                 SignedDocument = "";
             }
             catch (Exception e)
@@ -66,7 +68,7 @@ namespace eSignASPLibrary
         }
         public string GetReturnDocumentBase64()
         {
-            string returnDocument = $"{DocId}|{DocumentInfo}|{DocumentURL}|{DocumentHash}|{PreSignedDocument}|{DocType}";
+            string returnDocument = $"{DocId}|{DocumentInfo}|{DocumentURL}|{DocumentHash}|{PreSignedDocument}|{DocType}|{AppearanceType}";
             return Convert.ToBase64String(Encoding.UTF8.GetBytes(returnDocument));
         }
     }
