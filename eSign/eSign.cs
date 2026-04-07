@@ -640,7 +640,7 @@ namespace eSignASPLibrary
                 throw new ArgumentException($"Invalid argument {pageNumber} for page number, it can contain f->first, s->second, l->last, sl->second last and valid integer below number of pages.");
             }
         }
-        public eSignServiceReturn GetSigedDocument(string ResponseXML, string PreSignedTempFile)
+        public eSignServiceReturn GetSigedDocument(string ResponseXML, string PreSignedTempFile, byte[] logoJpegBytes = null)
         {
             eSignServiceReturn oreturn = new eSignServiceReturn();
             try
@@ -777,7 +777,9 @@ namespace eSignASPLibrary
                                 case DocType.Pdf:
                                     byte[] pdf = signClose(SignedHash, PreSignedDoc.PreSignedDocument);
                                     if (PreSignedDoc.AppearanceType == AppearanceType.Aadhaar)
-                                        pdf = PatchSignatureAppearance(pdf, UserCretificateNode);
+                                        pdf = logoJpegBytes != null
+                                            ? PatchSignatureAppearanceWithLogo(pdf, UserCretificateNode, logoJpegBytes)
+                                            : PatchSignatureAppearance(pdf, UserCretificateNode);
                                     PreSignedDoc.SignedDocument = Convert.ToBase64String(pdf);
                                     break;
                                 case DocType.Hash:
@@ -819,7 +821,7 @@ namespace eSignASPLibrary
                 return oreturn;
             }
         }
-        public eSignServiceReturn GetSigedDocument(string ResponseXML, byte[] PreSignedDocBytes)
+        public eSignServiceReturn GetSigedDocument(string ResponseXML, byte[] PreSignedDocBytes, byte[] logoJpegBytes = null)
         {
             eSignServiceReturn oreturn = new eSignServiceReturn();
             try
@@ -958,7 +960,9 @@ namespace eSignASPLibrary
                             {
                                 byte[] pdf = signClose(SignedHash, PreSignedDoc.PreSignedDocument);
                                 if (PreSignedDoc.AppearanceType == AppearanceType.Aadhaar)
-                                    pdf = PatchSignatureAppearance(pdf, UserCretificateNode);
+                                    pdf = logoJpegBytes != null
+                                        ? PatchSignatureAppearanceWithLogo(pdf, UserCretificateNode, logoJpegBytes)
+                                        : PatchSignatureAppearance(pdf, UserCretificateNode);
                                 PreSignedDoc.SignedDocument = Convert.ToBase64String(pdf);
                             }
                             PreSignedDoc.Status = eSign.status.Success;
@@ -1254,20 +1258,28 @@ namespace eSignASPLibrary
                         catch { }
 
                         // Build text content stream for this field
-                        var lines = new System.Collections.Generic.List<string>();
-                        lines.Add("Digitally Signed by");
-                        lines.Add("Name : " + certName);
-                        lines.Add("Aadhaar No : **** **** " + aadhaarLast4);
+                        const float textXBase = 8f;
+                        float availableTextW = rect.Width - textXBase - 4f;
+
+                        var rawLines = new System.Collections.Generic.List<string>();
+                        rawLines.Add("Digitally Signed by");
+                        rawLines.Add("Name : " + certName);
+                        rawLines.Add("Aadhaar No : **** **** " + aadhaarLast4);
                         if (!string.IsNullOrWhiteSpace(reason))
-                            lines.Add("Reason: " + reason);
-                        lines.Add("Date : " + signDate);
+                            rawLines.Add("Reason: " + reason);
+                        rawLines.Add("Date : " + signDate);
+
+                        var lines = new System.Collections.Generic.List<string>();
+                        foreach (string raw in rawLines)
+                            lines.AddRange(WrapLine(raw, availableTextW, 8f));
 
                         float startY = rect.Height - 10f;
                         var cs = new StringBuilder();
                         cs.Append("BT\n");
                         cs.Append("/F1 8 Tf\n");
                         cs.Append("/DeviceRGB cs\n0 0 0 sc\n");
-                        cs.Append("8 " + startY.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) + " Td\n");
+                        cs.Append(textXBase.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)
+                            + " " + startY.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) + " Td\n");
                         cs.Append("8 TL\n");
                         for (int li = 0; li < lines.Count; li++)
                         {
@@ -1311,6 +1323,273 @@ namespace eSignASPLibrary
             {
                 return signedPdfBytes;
             }
+        }
+
+        private static byte[] PatchSignatureAppearanceWithLogo(byte[] signedPdfBytes, string userX509CertBase64, byte[] logoJpegBytes)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(userX509CertBase64))
+                    return signedPdfBytes;
+
+                var subjectDN = new emCastle.X509.X509CertificateParser()
+                    .ReadCertificate(Convert.FromBase64String(userX509CertBase64)).SubjectDN;
+
+                var cnList = subjectDN.GetValueList(new emCastle.Asn1.DerObjectIdentifier("2.5.4.3"));
+                string certName = (cnList != null && cnList.Count > 0)
+                    ? cnList[0].ToString() : "Unknown";
+
+                string aadhaarLast4 = "XXXX";
+                try
+                {
+                    var aaList = subjectDN.GetValueList(new emCastle.Asn1.DerObjectIdentifier("2.5.4.12"));
+                    if (aaList != null && aaList.Count > 0)
+                    {
+                        string val = aaList[0].ToString();
+                        if (val.Length >= 4)
+                            aadhaarLast4 = val.Substring(val.Length - 4);
+                    }
+                }
+                catch { }
+
+                // Parse JPEG dimensions and colorspace
+                int imgPixelW = 0, imgPixelH = 0, imgComponents = 3;
+                TryReadJpegDimensions(logoJpegBytes, out imgPixelW, out imgPixelH, out imgComponents);
+                bool hasLogo = imgPixelW > 0 && imgPixelH > 0;
+
+                using (MemoryStream inputMs = new MemoryStream(signedPdfBytes))
+                using (MemoryStream outputMs = new MemoryStream())
+                {
+                    PdfReader reader   = new PdfReader(inputMs);
+                    PdfStamper stamper = new PdfStamper(reader, outputMs, '\0', true);
+
+                    AcroFields readerFields = reader.AcroFields;
+                    IList<string> sigNames  = readerFields.GetSignatureNames();
+                    if (sigNames.Count == 0)
+                    {
+                        stamper.Close();
+                        reader.Close();
+                        return signedPdfBytes;
+                    }
+
+                    // Font
+                    PdfDictionary fontObj = new PdfDictionary();
+                    fontObj.Put(PdfName.TYPE, PdfName.FONT);
+                    fontObj.Put(PdfName.SUBTYPE, new PdfName("Type1"));
+                    fontObj.Put(PdfName.BASEFONT, new PdfName("Times-Italic"));
+                    fontObj.Put(new PdfName("Encoding"), new PdfName("WinAnsiEncoding"));
+                    PdfIndirectObject fontRef = stamper.Writer.AddToBody(fontObj);
+
+                    // Image XObject (created once, shared across all signature fields)
+                    PdfIndirectObject imgRef = null;
+                    if (hasLogo)
+                    {
+                        PdfName colorSpace = imgComponents == 1 ? PdfName.DEVICEGRAY
+                                           : imgComponents == 4 ? PdfName.DEVICECMYK
+                                           : PdfName.DEVICERGB;
+                        PdfStream imgStream = new PdfStream(logoJpegBytes);
+                        imgStream.Put(PdfName.TYPE, PdfName.XOBJECT);
+                        imgStream.Put(PdfName.SUBTYPE, PdfName.IMAGE);
+                        imgStream.Put(PdfName.WIDTH, new PdfNumber(imgPixelW));
+                        imgStream.Put(PdfName.HEIGHT, new PdfNumber(imgPixelH));
+                        imgStream.Put(PdfName.COLORSPACE, colorSpace);
+                        imgStream.Put(PdfName.BITSPERCOMPONENT, new PdfNumber(8));
+                        imgStream.Put(PdfName.FILTER, PdfName.DCTDECODE);
+                        imgRef = stamper.Writer.AddToBody(imgStream);
+                    }
+
+                    // Resources dict (font + optional image XObject)
+                    PdfDictionary fontResources = new PdfDictionary();
+                    fontResources.Put(new PdfName("F1"), fontRef.IndirectReference);
+                    PdfDictionary resDict = new PdfDictionary();
+                    resDict.Put(PdfName.FONT, fontResources);
+                    if (imgRef != null)
+                    {
+                        PdfDictionary xObjRes = new PdfDictionary();
+                        xObjRes.Put(new PdfName("Im1"), imgRef.IndirectReference);
+                        resDict.Put(PdfName.XOBJECT, xObjRes);
+                    }
+
+                    foreach (string sigFieldName in sigNames)
+                    {
+                        AcroFields.Item item = readerFields.GetFieldItem(sigFieldName);
+                        if (item == null) continue;
+                        PdfDictionary widget = item.GetWidget(0);
+                        if (widget == null) continue;
+                        Rectangle rect = PdfReader.GetNormalizedRectangle(
+                            widget.GetAsArray(PdfName.RECT));
+
+                        string signDate = DateTime.Now.ToString("dd-MMM-yyyy HH:mm:ss");
+                        string reason   = string.Empty, location = string.Empty;
+                        try
+                        {
+                            PdfDictionary sigDict =
+                                PdfReader.GetPdfObject(widget.Get(PdfName.V)) as PdfDictionary;
+                            if (sigDict != null)
+                            {
+                                PdfString dateStr = sigDict.GetAsString(PdfName.M);
+                                if (dateStr != null)
+                                    try { signDate = PdfDate.Decode(dateStr.ToString())
+                                            .ToString("dd-MMM-yyyy HH:mm:ss"); } catch { }
+                                PdfString rs = sigDict.GetAsString(PdfName.REASON);
+                                PdfString ls = sigDict.GetAsString(PdfName.LOCATION);
+                                if (rs != null) reason   = rs.ToUnicodeString();
+                                if (ls != null) location = ls.ToUnicodeString();
+                            }
+                        }
+                        catch { }
+
+                        // Logo occupies left side; text starts after it
+                        float imgDispW = 0f;
+                        var cs = new StringBuilder();
+
+                        if (imgRef != null)
+                        {
+                            float imgDispH = rect.Height - 8f;
+                            imgDispW = imgDispH; // square display area
+                            float imgX = 4f;
+                            float imgY = 4f;
+                            cs.Append("q\n");
+                            cs.Append(imgDispW.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) + " 0 0 "
+                                + imgDispH.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) + " "
+                                + imgX.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) + " "
+                                + imgY.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) + " cm\n");
+                            cs.Append("/Im1 Do\n");
+                            cs.Append("Q\n");
+                        }
+
+                        float textX  = imgRef != null ? (4f + imgDispW + 6f) : 8f;
+                        float availableTextW = rect.Width - textX - 4f;
+
+                        var rawLines = new System.Collections.Generic.List<string>();
+                        rawLines.Add("Digitally Signed by");
+                        rawLines.Add("Name : " + certName);
+                        rawLines.Add("Aadhaar No : **** **** " + aadhaarLast4);
+                        if (!string.IsNullOrWhiteSpace(reason))
+                            rawLines.Add("Reason: " + reason);
+                        rawLines.Add("Date : " + signDate);
+
+                        var lines = new System.Collections.Generic.List<string>();
+                        foreach (string raw in rawLines)
+                            lines.AddRange(WrapLine(raw, availableTextW, 8f));
+
+                        float startY = rect.Height - 10f;
+
+                        cs.Append("BT\n");
+                        cs.Append("/F1 8 Tf\n");
+                        cs.Append("/DeviceRGB cs\n0 0 0 sc\n");
+                        cs.Append(textX.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)
+                            + " " + startY.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) + " Td\n");
+                        cs.Append("8 TL\n");
+                        for (int li = 0; li < lines.Count; li++)
+                        {
+                            string escaped = lines[li]
+                                .Replace("\\", "\\\\")
+                                .Replace("(", "\\(")
+                                .Replace(")", "\\)");
+                            cs.Append(li < lines.Count - 1
+                                ? "(" + escaped + ") Tj T*\n"
+                                : "(" + escaped + ") Tj\n");
+                        }
+                        cs.Append("ET");
+
+                        byte[] streamBytes = System.Text.Encoding.GetEncoding(1252).GetBytes(cs.ToString());
+
+                        PdfStream apStream = new PdfStream(streamBytes);
+                        apStream.Put(PdfName.TYPE, PdfName.XOBJECT);
+                        apStream.Put(PdfName.SUBTYPE, PdfName.FORM);
+                        apStream.Put(PdfName.BBOX,
+                            new PdfArray(new[] { 0f, 0f, rect.Width, rect.Height }));
+                        apStream.Put(PdfName.RESOURCES, resDict);
+                        PdfIndirectObject apRef = stamper.Writer.AddToBody(apStream);
+
+                        PdfDictionary newAp = new PdfDictionary();
+                        newAp.Put(PdfName.N, apRef.IndirectReference);
+                        widget.Put(PdfName.AP, newAp);
+                        stamper.MarkUsed(widget);
+                    }
+
+                    stamper.Close();
+                    reader.Close();
+
+                    return outputMs.ToArray();
+                }
+            }
+            catch
+            {
+                return signedPdfBytes;
+            }
+        }
+
+        /// <summary>
+        /// Breaks a single text line into wrapped sub-lines that fit within availableWidth,
+        /// using an approximate glyph width of 0.45 × fontSize for Type1 proportional fonts.
+        /// </summary>
+        private static IEnumerable<string> WrapLine(string text, float availableWidth, float fontSize)
+        {
+            float charW   = fontSize * 0.45f;
+            int   maxChars = Math.Max(1, (int)(availableWidth / charW));
+
+            if (text.Length <= maxChars)
+            {
+                yield return text;
+                yield break;
+            }
+
+            string[] words   = text.Split(' ');
+            var      current = new StringBuilder();
+            foreach (string word in words)
+            {
+                if (current.Length == 0)
+                {
+                    current.Append(word);
+                }
+                else if (current.Length + 1 + word.Length <= maxChars)
+                {
+                    current.Append(' ').Append(word);
+                }
+                else
+                {
+                    yield return current.ToString();
+                    current.Clear();
+                    current.Append(word);
+                }
+            }
+            if (current.Length > 0)
+                yield return current.ToString();
+        }
+
+        /// <summary>
+        /// Reads pixel dimensions and component count from a JPEG byte array by scanning SOF markers.
+        /// </summary>
+        private static bool TryReadJpegDimensions(byte[] jpeg, out int width, out int height, out int components)
+        {
+            width = 0; height = 0; components = 3;
+            if (jpeg == null || jpeg.Length < 10) return false;
+            if (jpeg[0] != 0xFF || jpeg[1] != 0xD8) return false;
+            int i = 2;
+            while (i < jpeg.Length - 8)
+            {
+                if (jpeg[i] != 0xFF) return false;
+                byte marker = jpeg[i + 1];
+                if (marker == 0xFF) { i++; continue; } // skip padding
+                // SOF0-SOF3, SOF5-SOF7, SOF9-SOF11, SOF13-SOF15
+                bool isSof = (marker >= 0xC0 && marker <= 0xC3)
+                          || (marker >= 0xC5 && marker <= 0xC7)
+                          || (marker >= 0xC9 && marker <= 0xCB)
+                          || (marker >= 0xCD && marker <= 0xCF);
+                if (isSof)
+                {
+                    height     = (jpeg[i + 5] << 8) | jpeg[i + 6];
+                    width      = (jpeg[i + 7] << 8) | jpeg[i + 8];
+                    components = jpeg[i + 9];
+                    return width > 0 && height > 0;
+                }
+                if (i + 3 >= jpeg.Length) return false;
+                int segLen = (jpeg[i + 2] << 8) | jpeg[i + 3];
+                i += 2 + segLen;
+            }
+            return false;
         }
 
         private static void DrawSignatureAppearance(
